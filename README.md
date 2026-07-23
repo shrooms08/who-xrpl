@@ -65,6 +65,21 @@ npm run dev            # http://localhost:3000
 Other scripts: `npm run build`, `npm run start`, `npm run typecheck`,
 `npm run lint`.
 
+### Auth setup (email OTP) — one-time
+
+Login uses Supabase email **OTP codes**. For the 6-digit code to appear in the
+email, the email template must render the token. In the Supabase dashboard →
+**Authentication → Email Templates → Magic Link**, ensure the body includes:
+
+```
+Your WHO? code is: {{ .Token }}
+```
+
+(The default template only contains a magic-link URL, not a code.) Also confirm
+**Authentication → Providers → Email** is enabled. Note: the built-in SMTP has a
+low hourly send limit — fine for small tests, configure custom SMTP for heavier
+use.
+
 ## Security model
 
 Read [`docs/RLS.md`](docs/RLS.md). In short: RLS is enabled **and forced** on
@@ -78,7 +93,7 @@ game-state transitions are written server-side with the service-role key.
 | Gate | Scope | Status |
 |---|---|---|
 | **0** | Scaffold: repo structure, schema + RLS, docs | ✅ this deliverable |
-| **1** | Lobbies: OTP auth, create/join, realtime presence | ⬜ |
+| **1** | Lobbies: OTP auth, create/join, realtime presence | ✅ |
 | **2** | Game loop: pure engine + server orchestration + UI | ⬜ |
 | **3** | XRPL testnet seat-claim via Xaman | ⬜ |
 
