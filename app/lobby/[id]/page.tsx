@@ -32,6 +32,24 @@ export default async function LobbyPage({
     .maybeSingle();
   if (!lobby) redirect("/?notmember=1");
 
+  // If the game is already running, send participants straight into it. Covers
+  // refresh/reconnect and the initial render race where the game row exists.
+  if (lobby.status === "in_game") {
+    const { data: game } = await supabase
+      .from("games")
+      .select("id")
+      .eq("lobby_id", lobbyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (game) {
+      const { data: isMember } = await supabase.rpc("is_game_member", {
+        p_game: game.id,
+      });
+      if (isMember) redirect(`/game/${game.id}`);
+    }
+  }
+
   const { data: memberRows } = await supabase
     .from("lobby_players")
     .select("player_id, joined_at")

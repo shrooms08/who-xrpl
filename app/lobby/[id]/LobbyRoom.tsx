@@ -205,6 +205,22 @@ export default function LobbyRoom({
       .on(
         "postgres_changes",
         {
+          event: "INSERT",
+          schema: "public",
+          table: "games",
+          filter: `lobby_id=eq.${lobbyId}`,
+        },
+        (payload) => {
+          // Reliable start trigger: the game row now EXISTS (the lobby-status
+          // flip fires before the insert, so querying on it can race). Send
+          // every member into the game.
+          const g = payload.new as { id: string };
+          router.replace(`/game/${g.id}`);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
           event: "DELETE",
           schema: "public",
           table: "lobbies",
@@ -358,10 +374,13 @@ export default function LobbyRoom({
         <ul className="flex flex-col gap-2">
           {members.map((m) => {
             const isOnline = online.has(m.playerId);
+            // Presence is page-scoped: once in-game, players have navigated to
+            // the game, so their lobby "offline" is meaningless — suppress it.
+            const showOffline = !isOnline && status === "waiting";
             return (
               <li
                 key={m.playerId}
-                className={`flex items-center gap-3 ${isOnline ? "" : "opacity-45"}`}
+                className={`flex items-center gap-3 ${showOffline ? "opacity-45" : ""}`}
               >
                 <AvatarChip
                   initial={(m.displayName[0] ?? "?").toUpperCase()}
@@ -377,7 +396,7 @@ export default function LobbyRoom({
                 {mode === "onchain" && (
                   <Chip variant="unclaimed">unclaimed</Chip>
                 )}
-                {!isOnline && (
+                {showOffline && (
                   <span className="font-utility text-[11px] text-faded">
                     offline
                   </span>
