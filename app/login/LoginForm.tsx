@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CodeEntry } from "@/components/ui/CodeEntry";
 
+// Some providers (e.g. Resend test mode) fail the send with an empty body, so
+// error.message arrives as "" or "{}". Coerce those to readable copy.
+function cleanErr(error: { message?: string } | null, fallback: string): string {
+  const m = (error?.message ?? "").trim();
+  return !m || m === "{}" ? fallback : m;
+}
+
 export default function LoginForm({ next }: { next: string }) {
   const router = useRouter();
   const supabase = createClient();
@@ -26,7 +33,14 @@ export default function LoginForm({ next }: { next: string }) {
       options: { shouldCreateUser: true },
     });
     setBusy(false);
-    if (error) return setError(error.message);
+    if (error) {
+      return setError(
+        cleanErr(
+          error,
+          "couldn't send a code to that email. if you already have one, use “enter a code”.",
+        ),
+      );
+    }
     setStep("code");
   }
 
@@ -34,13 +48,23 @@ export default function LoginForm({ next }: { next: string }) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { error } = await supabase.auth.verifyOtp({
+    // try the email-OTP type, then the magiclink type (covers admin-issued codes)
+    let { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
       token: code.trim(),
       type: "email",
     });
+    if (error) {
+      ({ error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: code.trim(),
+        type: "magiclink",
+      }));
+    }
     setBusy(false);
-    if (error) return setError(error.message);
+    if (error) {
+      return setError(cleanErr(error, "that code didn't work — double-check it and try again."));
+    }
     router.replace(next || "/");
     router.refresh();
   }
@@ -53,7 +77,7 @@ export default function LoginForm({ next }: { next: string }) {
       <p className="mb-6 font-body text-[16px] text-muted">
         {step === "email"
           ? "we'll email you a one-time code."
-          : `enter the code sent to ${email}.`}
+          : `enter the code for ${email}.`}
       </p>
 
       {step === "email" ? (
@@ -75,6 +99,20 @@ export default function LoginForm({ next }: { next: string }) {
           <Button type="submit" variant="primary" disabled={busy} className="w-full">
             {busy ? "sending…" : "send code"}
           </Button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!email.trim()) {
+                setError("enter your email first, then choose “enter a code”.");
+                return;
+              }
+              setError(null);
+              setStep("code");
+            }}
+            className="font-utility text-[12px] text-muted hover:text-ink"
+          >
+            already have a code? enter it →
+          </button>
         </form>
       ) : (
         <form onSubmit={verify} className="flex flex-col items-center gap-4">
