@@ -38,7 +38,7 @@ who-xrpl/                          ← folder renamed from "who?" during Gate 0
 | Criterion | Status | Evidence |
 |---|---|---|
 | `npm run dev` boots | ✅ PASS | `HTTP 200`, page renders `WHO?`, zero errors in dev log, "Ready in 3.1s"; `tsc --noEmit` clean. (Achieved after the folder rename — see Decision 1.) |
-| Migration applies cleanly to a fresh Supabase project | ⏳ PENDING (live apply blocked) | Static check passed: paren balance 143/143, all `$$` paired, all 11 tables RLS enabled+forced, `game_secrets` has 0 policies, 18 policies + 6 functions parse. **Live apply blocked** on the org free-project limit (2 max); awaiting the user to free a slot. See §4. |
+| Migration applies cleanly to a fresh Supabase project | ✅ PASS (live-applied) | Applied to fresh project **`wzpvdverwrqipxuequaf`** ("who-xrpl", us-east-1, $0/mo). `apply_migration` → `{"success":true}`. `list_tables` confirms all 11 tables with `rls_enabled: true`. Security advisor clean except intentional items (see §4). Migrations `0002`+`0003` harden function grants. |
 | RLS.md exists and explains every policy | ✅ PASS | `docs/RLS.md` documents all 18 policies, 4 helper fns, 2 RPCs, secret-word isolation, realtime. |
 
 ## 3. Decisions made that weren't specified (all flagged)
@@ -61,25 +61,43 @@ who-xrpl/                          ← folder renamed from "who?" during Gate 0
 7. **No `auth.users` → `profiles` trigger** — app inserts the profile row at
    onboarding (policy allows `id = auth.uid()`).
 
-## 4. Known issues / debt
+## 4. Supabase provisioning + security advisor
 
-- **Live migration apply is blocked**: the Supabase org (`bsftynifetmykjcialnf`,
-  "Minos") is at its 2 free-project limit (4 projects exist: Adrena + supersub
-  ACTIVE, playlanaLandingPage + bagimon INACTIVE). Creation returned a
-  `BadRequestException`. Awaiting the user to pause/delete/upgrade to free a slot,
-  then the migration will be applied and this report updated.
+- **Project:** `who-xrpl`, ref **`wzpvdverwrqipxuequaf`**, org "Minos"
+  (`bsftynifetmykjcialnf`), region `us-east-1`, cost **$0/month** (confirmed
+  before creation).
+- **Creation was initially blocked** by the org's 2-active-free-project limit
+  (`BadRequestException`); resolved after the user paused an active project.
+- **Migrations applied (all `{"success":true}`):** `0001_initial_schema`,
+  `0002_harden_function_grants`, `0003_revoke_anon_function_execute`.
+- **Security advisor — final state (after 0002/0003):**
+  - ✅ All 7 `anon`-executable SECURITY DEFINER warnings **eliminated** (anon
+    revoked; verified anon now gets `permission denied`, authenticated reads
+    still work).
+  - ℹ️ **INFO** `game_secrets` "RLS enabled, no policy" — **intentional** (the
+    locked secret-word table).
+  - ⚠️ **WARN** (×6) `authenticated` can execute the SECURITY DEFINER functions —
+    **expected/required**: helpers need it for RLS policy evaluation, RPCs are
+    client-facing; all benign (each keys off `auth.uid()`, leaks nothing).
+
+## 5. Known issues / debt
+
 - **`npm audit`** flags Next advisories fixed only in Next 15/16 — not applied
   (stack is spec-fixed to Next 14). Revisit at mainnet cutover.
 - One transitive `postcss` moderate advisory via Next's bundled copy — same story.
 - Landing page is a static placeholder; auth/lobby UI is Gate 1.
+- **Env not yet wired**: `.env.local` will be populated with the project URL +
+  anon key at the start of Gate 1 (the service-role key stays server-only).
+- Optional future hardening: move the 4 pure RLS-helper functions to a
+  non-exposed schema to drop the (benign) lint-0029 warnings.
 
-## 5. Gate-2 carry-forward (must not be lost)
+## 6. Gate-2 carry-forward (must not be lost)
 
 - **Public category** (amendment above).
 - **Mandatory imposter-knows-imposter RPC.**
 
-## 6. Outcome
+## 7. Outcome
 
-Gate 0 approved. Proceeding to provision the Supabase project (blocked on the
-free-project limit) before Gate 1. Awaiting user action on the limit + dashboard
-verification of the applied schema.
+Gate 0 approved; Supabase project provisioned and all three migrations applied
+successfully to `wzpvdverwrqipxuequaf`. Awaiting the user's dashboard
+verification before starting Gate 1.

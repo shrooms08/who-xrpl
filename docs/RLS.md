@@ -145,6 +145,42 @@ verification. The `/admin/ledger` listing reads via the service role.
 > time) is intentionally **not** exposed by `get_game_roster`. It will be served
 > by a dedicated, tightly-scoped Gate 2 RPC so this function leaks nothing extra.
 
+## Function execution grants (migrations 0002 + 0003)
+
+On creation Postgres grants `EXECUTE` to `PUBLIC`, and Supabase's default
+privileges additionally grant it **directly** to `anon`, `authenticated`, and
+`service_role`. That made every `SECURITY DEFINER` function callable by
+unauthenticated (`anon`) users via `/rest/v1/rpc`. Nothing leaked (each keys off
+`auth.uid()`, which is `NULL` for anon → helpers return false, RPCs return
+null / raise), but it violated least privilege. So:
+
+- **0002** revokes the `PUBLIC` grant and re-affirms `authenticated` +
+  `service_role`.
+- **0003** revokes the **direct `anon`** grant on all six functions.
+
+End state (verified via `pg_proc.proacl`): `postgres`, `authenticated`,
+`service_role` only — **no `anon`**. Verified behaviourally: an `authenticated`
+session can `select from lobbies` (policy calls `is_lobby_member`) without a
+permission error, while an `anon` session calling `is_lobby_member` gets
+`permission denied for function`.
+
+`authenticated` **must** keep `EXECUTE` — an RLS policy that calls a helper
+requires the *querying* role to hold `EXECUTE` (revoking it yields
+`permission denied for function ...` on every read). This is why the Supabase
+security advisor's lint **0029** ("signed-in users can execute SECURITY DEFINER
+function") remains for all six functions — it is **expected and required** for
+this RLS-helper pattern, and benign (no function exposes another player's role
+or the secret word). Optional future hardening: move the four pure-helper
+functions into a non-exposed schema so they drop off the PostgREST RPC surface
+while still being usable inside policies.
+
+## Advisor note: `game_secrets`
+
+The security advisor reports **INFO 0008** ("RLS enabled, no policy") for
+`game_secrets`. This is **intentional** — the empty policy set is exactly what
+locks the secret word away from all client roles. Adding any policy would defeat
+the design. Do not "fix" this lint.
+
 ## Realtime
 
 Client-observed tables are added to the `supabase_realtime` publication.
