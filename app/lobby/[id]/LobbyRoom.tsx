@@ -61,6 +61,16 @@ export default function LobbyRoom({
     setInviteUrl(`${window.location.origin}/join/${code}`);
   }, [code]);
 
+  // Presence heartbeat → keeps last_seen fresh so a live host is never reaped.
+  useEffect(() => {
+    const beat = () => {
+      supabase.rpc("touch_lobby_presence", { p_lobby: lobbyId });
+    };
+    beat();
+    const i = setInterval(beat, 8000);
+    return () => clearInterval(i);
+  }, [supabase, lobbyId]);
+
   const applyMembers = useCallback(
     (next: Member[]) => {
       membersRef.current = next;
@@ -176,6 +186,20 @@ export default function LobbyRoom({
           hostIdRef.current = row.host_id;
           setHostId(row.host_id);
           setStatus(row.status);
+          if (row.status === "in_game") {
+            // the game started — send every player into it
+            supabase
+              .from("games")
+              .select("id")
+              .eq("lobby_id", lobbyId)
+              .eq("status", "active")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (data) router.replace(`/game/${data.id}`);
+              });
+          }
         },
       )
       .on(
@@ -235,8 +259,19 @@ export default function LobbyRoom({
     router.refresh();
   }
 
-  function start() {
-    setError("game start (deal → clue → …) arrives in Gate 2.");
+  async function start() {
+    setError(null);
+    const r = await fetch("/api/game/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lobbyId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      setError(j?.error ? String(j.error) : "could not start the game.");
+      return;
+    }
+    if (j?.gameId) router.push(`/game/${j.gameId}`);
   }
 
   const canStart = isHost && members.length >= MIN_PLAYERS;
