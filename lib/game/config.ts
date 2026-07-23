@@ -26,6 +26,7 @@ export const TIMERS = {
   discussion: 120, // open chat
   vote: 30, // ejection vote
   guess: 15, // ejected imposter's single word guess
+  reveal: 6, // ejection/guess result display before the round concludes
 } as const;
 
 /** Imposters for a game of `n` players. Throws outside the supported range. */

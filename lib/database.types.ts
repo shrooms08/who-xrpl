@@ -11,8 +11,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -152,21 +150,9 @@ export type Database = {
         ]
       }
       game_secrets: {
-        Row: {
-          category: string
-          game_id: string
-          word: string
-        }
-        Insert: {
-          category: string
-          game_id: string
-          word: string
-        }
-        Update: {
-          category?: string
-          game_id?: string
-          word?: string
-        }
+        Row: { category: string; game_id: string; word: string }
+        Insert: { category: string; game_id: string; word: string }
+        Update: { category?: string; game_id?: string; word?: string }
         Relationships: [
           {
             foreignKeyName: "game_secrets_game_id_fkey"
@@ -185,6 +171,8 @@ export type Database = {
           id: string
           lobby_id: string
           status: Database["public"]["Enums"]["game_status"]
+          version: number
+          winner: Database["public"]["Enums"]["player_role"] | null
         }
         Insert: {
           created_at?: string
@@ -193,6 +181,8 @@ export type Database = {
           id?: string
           lobby_id: string
           status?: Database["public"]["Enums"]["game_status"]
+          version?: number
+          winner?: Database["public"]["Enums"]["player_role"] | null
         }
         Update: {
           created_at?: string
@@ -201,6 +191,8 @@ export type Database = {
           id?: string
           lobby_id?: string
           status?: Database["public"]["Enums"]["game_status"]
+          version?: number
+          winner?: Database["public"]["Enums"]["player_role"] | null
         }
         Relationships: [
           {
@@ -302,18 +294,21 @@ export type Database = {
         Row: {
           id: string
           joined_at: string
+          last_seen: string
           lobby_id: string
           player_id: string
         }
         Insert: {
           id?: string
           joined_at?: string
+          last_seen?: string
           lobby_id: string
           player_id: string
         }
         Update: {
           id?: string
           joined_at?: string
+          last_seen?: string
           lobby_id?: string
           player_id?: string
         }
@@ -335,55 +330,68 @@ export type Database = {
         ]
       }
       profiles: {
-        Row: {
-          created_at: string
-          display_name: string | null
-          id: string
-        }
-        Insert: {
-          created_at?: string
-          display_name?: string | null
-          id: string
-        }
-        Update: {
-          created_at?: string
-          display_name?: string | null
-          id?: string
-        }
+        Row: { created_at: string; display_name: string | null; id: string }
+        Insert: { created_at?: string; display_name?: string | null; id: string }
+        Update: { created_at?: string; display_name?: string | null; id?: string }
         Relationships: []
       }
       rounds: {
         Row: {
+          awaiting_guess: boolean
           created_at: string
           current_turn_player_id: string | null
+          ejected_player_id: string | null
+          ejected_role: Database["public"]["Enums"]["player_role"] | null
           game_id: string
+          guess_correct: boolean | null
           id: string
           phase: Database["public"]["Enums"]["round_phase"]
           phase_ends_at: string | null
           round_number: number
+          turn_index: number
+          turn_order: string[] | null
         }
         Insert: {
+          awaiting_guess?: boolean
           created_at?: string
           current_turn_player_id?: string | null
+          ejected_player_id?: string | null
+          ejected_role?: Database["public"]["Enums"]["player_role"] | null
           game_id: string
+          guess_correct?: boolean | null
           id?: string
           phase?: Database["public"]["Enums"]["round_phase"]
           phase_ends_at?: string | null
           round_number: number
+          turn_index?: number
+          turn_order?: string[] | null
         }
         Update: {
+          awaiting_guess?: boolean
           created_at?: string
           current_turn_player_id?: string | null
+          ejected_player_id?: string | null
+          ejected_role?: Database["public"]["Enums"]["player_role"] | null
           game_id?: string
+          guess_correct?: boolean | null
           id?: string
           phase?: Database["public"]["Enums"]["round_phase"]
           phase_ends_at?: string | null
           round_number?: number
+          turn_index?: number
+          turn_order?: string[] | null
         }
         Relationships: [
           {
             foreignKeyName: "rounds_current_turn_player_id_fkey"
             columns: ["current_turn_player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rounds_ejected_player_id_fkey"
+            columns: ["ejected_player_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -444,16 +452,20 @@ export type Database = {
         ]
       }
     }
-    Views: {
-      [_ in never]: never
-    }
+    Views: { [_ in never]: never }
     Functions: {
+      apply_game_state: {
+        Args: {
+          p_expected_version: number
+          p_game: string
+          p_is_deal?: boolean
+          p_state: Json
+        }
+        Returns: number
+      }
       create_lobby: {
         Args: { p_max_players: number }
-        Returns: {
-          code: string
-          id: string
-        }[]
+        Returns: { code: string; id: string }[]
       }
       gen_lobby_code: { Args: Record<PropertyKey, never>; Returns: string }
       get_game_roster: {
@@ -466,6 +478,7 @@ export type Database = {
           turn_order: number
         }[]
       }
+      get_my_role_card: { Args: { p_game: string }; Returns: Json }
       get_my_word: { Args: { p_game: string }; Returns: string }
       is_game_member: { Args: { p_game: string }; Returns: boolean }
       is_lobby_member: { Args: { p_lobby: string }; Returns: boolean }
@@ -476,17 +489,24 @@ export type Database = {
         Args: { p_absent_host: string; p_lobby: string }
         Returns: string
       }
+      send_chat: { Args: { p_content: string; p_game: string }; Returns: undefined }
       shares_lobby_with: { Args: { p_other: string }; Returns: boolean }
+      touch_lobby_presence: { Args: { p_lobby: string }; Returns: undefined }
     }
     Enums: {
       game_status: "active" | "ended"
       lobby_status: "waiting" | "in_game" | "ended"
       player_role: "crew" | "imposter"
-      round_phase: "deal" | "clue" | "discussion" | "vote" | "reveal" | "end"
+      round_phase:
+        | "deal"
+        | "clue"
+        | "discussion"
+        | "vote"
+        | "reveal"
+        | "guess"
+        | "end"
     }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    CompositeTypes: { [_ in never]: never }
   }
 }
 
@@ -596,7 +616,7 @@ export const Constants = {
       game_status: ["active", "ended"],
       lobby_status: ["waiting", "in_game", "ended"],
       player_role: ["crew", "imposter"],
-      round_phase: ["deal", "clue", "discussion", "vote", "reveal", "end"],
+      round_phase: ["deal", "clue", "discussion", "vote", "reveal", "guess", "end"],
     },
   },
 } as const
