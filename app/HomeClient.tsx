@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { lobbyErrorMessage } from "@/lib/lobby-errors";
+import { Logo } from "@/components/ui/Logo";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { CodeEntry } from "@/components/ui/CodeEntry";
+import { InkUnderline } from "@/components/doodles/InkUnderline";
 
 type LobbyLite = {
   id: string;
@@ -64,86 +69,109 @@ export default function HomeClient({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-8 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">WHO?</h1>
-          <p className="text-sm text-neutral-400">
-            Signed in as {displayName}
-          </p>
+    <main className="mx-auto flex min-h-screen max-w-lg flex-col gap-8 p-6">
+      <header className="flex items-start justify-between">
+        <div className="flex flex-col gap-1">
+          <Logo size={56} />
+          <div className="font-body text-[17px] text-muted">
+            find the imposter. win real XRP.
+          </div>
+          <InkUnderline width={150} className="-mt-0.5" />
         </div>
         <button
           onClick={signOut}
-          className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+          className="wobble-1 border-2 border-ink px-3 py-1 font-utility text-[12px] text-ink hover:bg-ink hover:text-paper"
         >
-          Sign out
+          sign out
         </button>
       </header>
 
+      <div className="font-utility text-[12px] text-muted">
+        signed in as {displayName}
+      </div>
+
       {error && (
-        <p className="rounded-lg border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
+        <Card wobble={3} className="px-4 py-3">
+          <p className="font-body text-[16px] text-ink">{error}</p>
+        </Card>
       )}
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-        <h2 className="mb-4 text-lg font-semibold">Create a lobby</h2>
-        <label className="mb-2 block text-sm text-neutral-400">
-          Max players: <span className="font-mono text-neutral-200">{maxPlayers}</span>
-        </label>
-        <input
-          type="range"
-          min={4}
-          max={10}
-          value={maxPlayers}
-          onChange={(e) => setMaxPlayers(Number(e.target.value))}
-          className="mb-4 w-full accent-white"
-        />
-        <button
+      {/* create */}
+      <Card wobble={1} className="flex flex-col gap-4 p-6">
+        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+          new game
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-body text-[17px]">max players</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMaxPlayers((n) => Math.max(4, n - 1))}
+              aria-label="fewer"
+              className="wobble-2 flex h-9 w-9 items-center justify-center border-2 border-ink font-display text-[20px] leading-none hover:bg-ink hover:text-paper"
+            >
+              −
+            </button>
+            <span className="w-8 text-center font-display text-[30px] leading-none">
+              {maxPlayers}
+            </span>
+            <button
+              onClick={() => setMaxPlayers((n) => Math.min(10, n + 1))}
+              aria-label="more"
+              className="wobble-4 flex h-9 w-9 items-center justify-center border-2 border-ink font-display text-[20px] leading-none hover:bg-ink hover:text-paper"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <Button
+          variant="primary"
           onClick={createLobby}
           disabled={busy !== null}
-          className="w-full rounded-lg bg-white px-3 py-2 font-medium text-black disabled:opacity-50"
+          className="w-full"
         >
-          {busy === "create" ? "Creating…" : "Create lobby"}
-        </button>
-      </section>
+          {busy === "create" ? "creating…" : "create game"}
+        </Button>
+      </Card>
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-        <h2 className="mb-4 text-lg font-semibold">Join by code</h2>
-        <form onSubmit={joinLobby} className="flex gap-2">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="6-char code"
-            maxLength={6}
-            className="flex-1 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono uppercase tracking-widest outline-none focus:border-neutral-500"
-          />
-          <button
-            disabled={busy !== null || code.trim().length === 0}
-            className="rounded-lg bg-white px-4 py-2 font-medium text-black disabled:opacity-50"
+      {/* join */}
+      <Card wobble={3} className="flex flex-col gap-4 p-6">
+        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+          join by code
+        </div>
+        <form onSubmit={joinLobby} className="flex flex-col items-center gap-4">
+          <CodeEntry value={code} editable onChange={setCode} length={6} />
+          <Button
+            variant="ghost"
+            type="submit"
+            disabled={busy !== null || code.trim().length < 6}
+            className="w-full"
           >
-            {busy === "join" ? "Joining…" : "Join"}
-          </button>
+            {busy === "join" ? "joining…" : "join game"}
+          </Button>
         </form>
-      </section>
+      </Card>
 
       {lobbies.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-            Your open lobbies
-          </h2>
-          <ul className="space-y-2">
-            {lobbies.map((l) => (
+        <section className="flex flex-col gap-3">
+          <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+            your open lobbies
+          </div>
+          <ul className="flex flex-col gap-2">
+            {lobbies.map((l, i) => (
               <li key={l.id}>
-                <Link
-                  href={`/lobby/${l.id}`}
-                  className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3 hover:bg-neutral-800/60"
-                >
-                  <span className="font-mono tracking-widest">{l.code}</span>
-                  <span className="text-sm text-neutral-400">
-                    {l.host_id === userId ? "Host" : "Member"} · max{" "}
-                    {l.max_players}
-                  </span>
+                <Link href={`/lobby/${l.id}`}>
+                  <Card
+                    wobble={((i % 4) + 1) as 1 | 2 | 3 | 4}
+                    className="flex items-center justify-between px-4 py-3 hover:shadow-hero"
+                  >
+                    <span className="font-display text-[22px] tracking-[0.15em]">
+                      {l.code}
+                    </span>
+                    <span className="font-utility text-[11px] text-muted">
+                      {l.host_id === userId ? "host" : "member"} · max{" "}
+                      {l.max_players}
+                    </span>
+                  </Card>
                 </Link>
               </li>
             ))}

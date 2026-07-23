@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { lobbyErrorMessage } from "@/lib/lobby-errors";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
+import { CodeEntry } from "@/components/ui/CodeEntry";
+import { Toast } from "@/components/ui/Toast";
+import { AvatarChip } from "@/components/ui/AvatarChip";
 
 export type Member = {
   playerId: string;
@@ -41,8 +47,9 @@ export default function LobbyRoom({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
+  // Gate-1 visual only: On-chain seat-claim is wired in Gate 3.
+  const [mode, setMode] = useState<"casual" | "onchain">("casual");
 
-  // Refs mirror state so realtime callbacks never read stale closures.
   const membersRef = useRef(initialMembers);
   const hostIdRef = useRef(initialHostId);
   const onlineRef = useRef<Set<string>>(new Set());
@@ -58,7 +65,6 @@ export default function LobbyRoom({
     (next: Member[]) => {
       membersRef.current = next;
       setMembers(next);
-      // If I'm no longer a member and I didn't leave on purpose → kicked/closed.
       if (!leavingRef.current && !next.some((m) => m.playerId === userId)) {
         leavingRef.current = true;
         router.replace("/?removed=1");
@@ -87,7 +93,6 @@ export default function LobbyRoom({
     );
   }, [supabase, lobbyId, applyMembers]);
 
-  // Designated reaper = earliest-joined *online* member (excluding the absentee).
   const isDesignatedReaper = useCallback(
     (absentId: string) => {
       const candidates = membersRef.current
@@ -115,14 +120,11 @@ export default function LobbyRoom({
       setOnline(set);
     };
 
-    const handleLeave = async (
-      leftPresences: Array<{ player_id?: string }>,
-    ) => {
+    const handleLeave = async (leftPresences: Array<{ player_id?: string }>) => {
       for (const p of leftPresences) {
         const leftId = p.player_id;
         if (!leftId) continue;
 
-        // A non-host dropped and I'm the host → prune their membership row.
         if (hostIdRef.current === userId && leftId !== hostIdRef.current) {
           await supabase
             .from("lobby_players")
@@ -131,8 +133,6 @@ export default function LobbyRoom({
             .eq("player_id", leftId);
         }
 
-        // The host dropped → after a grace period, the designated reaper
-        // removes the absent host and triggers migration.
         if (leftId === hostIdRef.current && leftId !== userId) {
           const absent = leftId;
           setTimeout(() => {
@@ -152,9 +152,7 @@ export default function LobbyRoom({
     };
 
     channel = supabase
-      .channel(`lobby:${lobbyId}`, {
-        config: { presence: { key: userId } },
-      })
+      .channel(`lobby:${lobbyId}`, { config: { presence: { key: userId } } })
       .on(
         "postgres_changes",
         {
@@ -214,9 +212,9 @@ export default function LobbyRoom({
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 1600);
     } catch {
-      /* clipboard blocked — the link is still shown */
+      /* clipboard blocked — the code is still shown */
     }
   }
 
@@ -227,7 +225,7 @@ export default function LobbyRoom({
       .delete()
       .eq("lobby_id", lobbyId)
       .eq("player_id", targetId);
-    if (error) setError(error.message);
+    if (error) setError(lobbyErrorMessage(error));
   }
 
   async function leave() {
@@ -238,119 +236,155 @@ export default function LobbyRoom({
   }
 
   function start() {
-    // Gate 1 stub: enablement is the deliverable; the actual deal/loop is Gate 2.
-    setError("Game start (deal → clue → …) arrives in Gate 2.");
+    setError("game start (deal → clue → …) arrives in Gate 2.");
   }
 
   const canStart = isHost && members.length >= MIN_PLAYERS;
+  const needed = Math.max(0, MIN_PLAYERS - members.length);
+  const emptySlots = Math.max(0, maxPlayers - members.length);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-6">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-6 p-6">
       <header className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Lobby</h1>
-          <p className="text-sm text-neutral-400">
+          <h1 className="font-display text-[30px] leading-none">lobby</h1>
+          <div className="mt-1 font-utility text-[12px] text-muted">
             {members.length}/{maxPlayers} players
             {status !== "waiting" && ` · ${status}`}
-          </p>
+          </div>
         </div>
         <button
           onClick={leave}
-          className="rounded-lg border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+          className="wobble-1 border-2 border-ink px-3 py-1 font-utility text-[12px] text-ink hover:bg-ink hover:text-paper"
         >
-          Leave
+          leave
         </button>
       </header>
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-        <div className="mb-1 text-xs uppercase tracking-wide text-neutral-500">
-          Invite code
+      {/* invite */}
+      <Card wobble={1} className="flex flex-col gap-3 p-5">
+        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+          invite code
         </div>
-        <div className="mb-3 flex items-center gap-3">
-          <span className="font-mono text-3xl tracking-[0.3em]">{code}</span>
+        <div className="flex items-center justify-between gap-3">
+          <CodeEntry value={code} length={6} />
           <button
             onClick={copyInvite}
-            className="ml-auto rounded-lg border border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-800"
+            className="wobble-3 shrink-0 border-2 border-ink px-3 py-2 font-utility text-[12px] hover:bg-ink hover:text-paper"
           >
-            {copied ? "Copied!" : "Copy link"}
+            copy link
           </button>
         </div>
-        {inviteUrl && (
-          <p className="truncate font-mono text-xs text-neutral-500">
-            {inviteUrl}
-          </p>
-        )}
-      </section>
+        {copied && <Toast>code copied ✓</Toast>}
+      </Card>
 
-      {error && (
-        <p className="rounded-lg border border-amber-900 bg-amber-950/40 px-3 py-2 text-sm text-amber-300">
-          {error}
+      {/* mode toggle (host) — On-chain seat claims land in Gate 3 */}
+      {isHost && (
+        <div className="flex items-center gap-3">
+          <span className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+            mode
+          </span>
+          <button onClick={() => setMode("casual")} aria-pressed={mode === "casual"}>
+            <Chip variant={mode === "casual" ? "solid" : "pending"}>casual</Chip>
+          </button>
+          <button onClick={() => setMode("onchain")} aria-pressed={mode === "onchain"}>
+            <Chip variant={mode === "onchain" ? "solid" : "pending"}>on-chain</Chip>
+          </button>
+        </div>
+      )}
+      {mode === "onchain" && (
+        <p className="font-body text-[15px] text-muted">
+          on-chain seat claims are wired in Gate 3 — casual for now.
         </p>
       )}
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Players
-        </h2>
-        <ul className="space-y-2">
+      {error && (
+        <Card wobble={2} className="px-4 py-3">
+          <p className="font-body text-[16px] text-ink">{error}</p>
+        </Card>
+      )}
+
+      {/* roster */}
+      <section className="flex flex-col gap-2">
+        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+          players
+        </div>
+        <ul className="flex flex-col gap-2">
           {members.map((m) => {
             const isOnline = online.has(m.playerId);
             return (
               <li
                 key={m.playerId}
-                className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-3"
+                className={`flex items-center gap-3 ${isOnline ? "" : "opacity-45"}`}
               >
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    isOnline ? "bg-green-500" : "bg-neutral-600"
-                  }`}
-                  title={isOnline ? "online" : "offline"}
+                <AvatarChip
+                  initial={(m.displayName[0] ?? "?").toUpperCase()}
+                  size={40}
                 />
-                <span className="font-medium">
-                  {m.displayName}
+                <span className="font-utility text-[13px]">
+                  {m.displayName.toUpperCase()}
                   {m.playerId === userId && (
-                    <span className="text-neutral-500"> (you)</span>
+                    <span className="text-muted"> (you)</span>
                   )}
                 </span>
-                {m.playerId === hostId && (
-                  <span className="rounded bg-neutral-700 px-1.5 py-0.5 text-xs">
-                    Host
+                {m.playerId === hostId && <Chip variant="pending">host</Chip>}
+                {mode === "onchain" && (
+                  <Chip variant="unclaimed">unclaimed</Chip>
+                )}
+                {!isOnline && (
+                  <span className="font-utility text-[11px] text-faded">
+                    offline
                   </span>
                 )}
                 {isHost && m.playerId !== userId && (
                   <button
                     onClick={() => kick(m.playerId)}
-                    className="ml-auto rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-red-300"
+                    className="ml-auto wobble-2 border-2 border-ink px-2 py-1 font-utility text-[11px] hover:bg-hot hover:border-hot hover:text-paper"
                   >
-                    Kick
+                    kick
                   </button>
                 )}
               </li>
             );
           })}
+
+          {/* empty slots */}
+          {Array.from({ length: emptySlots }).map((_, i) => (
+            <li key={`empty-${i}`} className="flex items-center gap-3">
+              <div
+                className="flex h-10 w-10 items-center justify-center border-[2px] border-dashed border-faded"
+                style={{ borderRadius: "55% 45% 50% 50% / 50% 55% 45% 50%" }}
+                aria-hidden="true"
+              />
+              <span className="font-utility text-[12px] text-faded">
+                waiting…
+              </span>
+            </li>
+          ))}
         </ul>
       </section>
 
+      {/* start */}
       <section className="mt-auto">
         {isHost ? (
           <>
-            <button
+            <Button
+              variant="primary"
               onClick={start}
               disabled={!canStart}
-              className="w-full rounded-lg bg-white px-3 py-3 font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40"
+              className="w-full"
             >
-              Start game
-            </button>
+              start game
+            </Button>
             {!canStart && (
-              <p className="mt-2 text-center text-sm text-neutral-500">
-                Need at least {MIN_PLAYERS} players to start (
-                {members.length}/{MIN_PLAYERS}).
+              <p className="mt-2 text-center font-utility text-[12px] text-muted">
+                need {needed} more to start
               </p>
             )}
           </>
         ) : (
-          <p className="text-center text-sm text-neutral-500">
-            Waiting for the host to start the game…
+          <p className="text-center font-body text-[16px] text-muted">
+            waiting for the host to start…
           </p>
         )}
       </section>

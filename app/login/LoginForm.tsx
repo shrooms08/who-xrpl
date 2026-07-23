@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/ui/Logo";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { CodeEntry } from "@/components/ui/CodeEntry";
 
 export default function LoginForm({ next }: { next: string }) {
   const router = useRouter();
@@ -37,56 +41,47 @@ export default function LoginForm({ next }: { next: string }) {
     });
     setBusy(false);
     if (error) return setError(error.message);
-    // Session cookie is set; let the server decide onboarding vs. destination.
     router.replace(next || "/");
     router.refresh();
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-      <h1 className="mb-1 text-2xl font-bold">Sign in to WHO?</h1>
-      <p className="mb-6 text-sm text-neutral-400">
+    <Card wobble={1} className="w-full max-w-sm p-7">
+      <div className="mb-1">
+        <Logo size={40} />
+      </div>
+      <p className="mb-6 font-body text-[16px] text-muted">
         {step === "email"
-          ? "We'll email you a one-time code."
-          : `Enter the code sent to ${email}.`}
+          ? "we'll email you a one-time code."
+          : `enter the code sent to ${email}.`}
       </p>
 
       {step === "email" ? (
-        <form onSubmit={sendCode} className="space-y-3">
-          <input
-            type="email"
-            required
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-neutral-500"
-          />
-          <button
-            disabled={busy}
-            className="w-full rounded-lg bg-white px-3 py-2 font-medium text-black disabled:opacity-50"
-          >
-            {busy ? "Sending…" : "Send code"}
-          </button>
+        <form onSubmit={sendCode} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+              email
+            </label>
+            <input
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="wobble-2 w-full border-2 border-ink bg-card px-4 py-3 font-body text-[17px] outline-none placeholder:text-faded"
+            />
+          </div>
+          <Button type="submit" variant="primary" disabled={busy} className="w-full">
+            {busy ? "sending…" : "send code"}
+          </Button>
         </form>
       ) : (
-        <form onSubmit={verify} className="space-y-3">
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            required
-            autoFocus
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="6-digit code"
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 tracking-widest outline-none focus:border-neutral-500"
-          />
-          <button
-            disabled={busy}
-            className="w-full rounded-lg bg-white px-3 py-2 font-medium text-black disabled:opacity-50"
-          >
-            {busy ? "Verifying…" : "Verify & continue"}
-          </button>
+        <form onSubmit={verify} className="flex flex-col items-center gap-4">
+          <CodeEntry value={code} editable onChange={setCode} length={6} autoFocus />
+          <Button type="submit" variant="primary" disabled={busy} className="w-full">
+            {busy ? "verifying…" : "verify & continue"}
+          </Button>
           <button
             type="button"
             onClick={() => {
@@ -94,14 +89,14 @@ export default function LoginForm({ next }: { next: string }) {
               setCode("");
               setError(null);
             }}
-            className="w-full text-sm text-neutral-400 hover:text-neutral-200"
+            className="font-utility text-[12px] text-muted hover:text-ink"
           >
-            Use a different email
+            use a different email
           </button>
         </form>
       )}
 
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
-    </div>
+      {error && <p className="mt-4 font-body text-[15px] text-muted">{error}</p>}
+    </Card>
   );
 }

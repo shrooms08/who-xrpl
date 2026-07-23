@@ -7,6 +7,8 @@ const VARIANTS = {
   pending: "border-[1.5px] border-ink text-ink",
   verified: "border-2 border-calm text-calm",
   hot: "border-[1.5px] border-dashed border-hot text-hot",
+  // selected state of a two-chip toggle (e.g. Casual / On-chain)
+  solid: "border-2 border-ink bg-ink text-paper",
 } as const;
 
 const WOBBLE = ["wobble-1", "wobble-2", "wobble-3", "wobble-4"] as const;

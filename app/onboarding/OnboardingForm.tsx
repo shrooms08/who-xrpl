@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 export default function OnboardingForm({
   userId,
@@ -23,7 +25,7 @@ export default function OnboardingForm({
     e.preventDefault();
     const trimmed = name.trim();
     if (trimmed.length < 2) {
-      setError("Pick a name with at least 2 characters.");
+      setError("pick a name with at least 2 characters.");
       return;
     }
     setBusy(true);
@@ -38,30 +40,35 @@ export default function OnboardingForm({
   }
 
   return (
-    <form
-      onSubmit={save}
-      className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6"
-    >
-      <h1 className="mb-1 text-2xl font-bold">Choose a display name</h1>
-      <p className="mb-6 text-sm text-neutral-400">
-        This is how other players will see you.
-      </p>
-      <input
-        required
-        autoFocus
-        maxLength={24}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="e.g. Rukevwe"
-        className="mb-3 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-neutral-500"
-      />
-      <button
-        disabled={busy}
-        className="w-full rounded-lg bg-white px-3 py-2 font-medium text-black disabled:opacity-50"
-      >
-        {busy ? "Saving…" : "Continue"}
-      </button>
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
-    </form>
+    <Card wobble={1} className="w-full max-w-sm p-7">
+      <form onSubmit={save} className="flex flex-col gap-4">
+        <div>
+          <h1 className="font-display text-[30px] leading-tight">
+            what should we call you?
+          </h1>
+          <p className="font-body text-[16px] text-muted">
+            this is how other players will see you.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+            display name
+          </label>
+          <input
+            required
+            autoFocus
+            maxLength={24}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. rukevwe"
+            className="wobble-2 w-full border-2 border-ink bg-card px-4 py-3 font-body text-[17px] outline-none placeholder:text-faded"
+          />
+        </div>
+        <Button type="submit" variant="primary" disabled={busy} className="w-full">
+          {busy ? "saving…" : "continue"}
+        </Button>
+        {error && <p className="font-body text-[15px] text-muted">{error}</p>}
+      </form>
+    </Card>
   );
 }

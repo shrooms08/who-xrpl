@@ -185,6 +185,11 @@ export default function DesignShowcase() {
         <Chip variant="hot">with you: TAO</Chip>
       </Section>
 
+      <Section title="Toggle chips (selected = ink-filled)">
+        <Chip variant="solid">casual</Chip>
+        <Chip variant="pending">on-chain</Chip>
+      </Section>
+
       <Section title="Card">
         <Card wobble={1} className="p-5">
           <div className="font-display text-[22px]">a paper card</div>
