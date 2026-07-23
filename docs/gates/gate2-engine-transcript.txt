@@ -1,0 +1,31 @@
+WHO? — sample 4-player game (deterministic, seed=7)
+====================================================
+secret word: MANGO   ·   category (public): food
+roles (omniscient — hidden from players in the real app):
+  MIRA   crew
+  ZARA   crew
+  KOFI   imposter
+  DEDE   crew
+clue turn order: DEDE → MIRA → ZARA → KOFI
+
+ROUND 1 — CLUE PHASE
+  DEDE   "orange inside"
+  MIRA   "sweet but stringy"
+  ZARA   "you peel it"
+  KOFI   "grows on trees"
+
+DISCUSSION (120s open chat) — the crew compares notes…
+
+VOTE PHASE
+  MIRA   votes → KOFI
+  ZARA   votes → KOFI
+  KOFI   votes → DEDE
+  DEDE   votes → KOFI
+
+RESULT: KOFI ejected — role: imposter
+
+GUESS PHASE — ejected imposter (KOFI) gets one shot (15s)…
+  guessed "melon" → wrong
+
+====================================================
+GAME OVER — winner: CREW   (round 1)
