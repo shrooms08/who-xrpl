@@ -45,7 +45,7 @@ export default function LobbyRoom({
   const [status, setStatus] = useState(initialStatus);
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState("");
   // Gate-1 visual only: On-chain seat-claim is wired in Gate 3.
   const [mode, setMode] = useState<"casual" | "onchain">("casual");
@@ -232,13 +232,13 @@ export default function LobbyRoom({
     };
   }, [supabase, lobbyId, userId, fetchMembers, isDesignatedReaper, router]);
 
-  async function copyInvite() {
+  async function copyText(text: string, message: string) {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      await navigator.clipboard.writeText(text);
+      setCopied(message);
+      setTimeout(() => setCopied(null), 1600);
     } catch {
-      /* clipboard blocked — the code is still shown */
+      /* clipboard blocked — the value is still shown on screen */
     }
   }
 
@@ -302,15 +302,26 @@ export default function LobbyRoom({
           invite code
         </div>
         <div className="flex items-center justify-between gap-3">
-          <CodeEntry value={code} length={6} />
           <button
-            onClick={copyInvite}
+            type="button"
+            onClick={() => copyText(code, "code copied ✓")}
+            title="click to copy the code"
+            className="cursor-pointer"
+            aria-label={`copy invite code ${code}`}
+          >
+            <CodeEntry value={code} length={6} />
+          </button>
+          <button
+            onClick={() => copyText(inviteUrl, "link copied ✓")}
             className="wobble-3 shrink-0 border-2 border-ink px-3 py-2 font-utility text-[12px] hover:bg-ink hover:text-paper"
           >
             copy link
           </button>
         </div>
-        {copied && <Toast>code copied ✓</Toast>}
+        <div className="font-utility text-[10px] text-faded">
+          tap the code to copy it
+        </div>
+        {copied && <Toast>{copied}</Toast>}
       </Card>
 
       {/* mode toggle (host) — On-chain seat claims land in Gate 3 */}
