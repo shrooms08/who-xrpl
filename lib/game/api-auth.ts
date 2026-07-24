@@ -27,3 +27,12 @@ export async function authGameMember(gameId: string) {
   }
   return { user, supabase } as const;
 }
+
+/** Map an engine/orchestration error code to an HTTP status. */
+export function errorStatus(code: string): number {
+  if (code === "not_found") return 404;
+  if (code === "not_your_turn" || code === "not_living" || code === "not_guesser")
+    return 403;
+  if (code === "wrong_phase" || code === "conflict") return 409;
+  return 400; // clue errors (too_long / empty / contains_word) etc.
+}

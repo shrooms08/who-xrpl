@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { authGameMember } from "@/lib/game/api-auth";
-import { loadGameState, persist, advanceIfDue } from "@/lib/game/orchestration";
+import { authGameMember, errorStatus } from "@/lib/game/api-auth";
+import { advanceIfDue, mutateGame } from "@/lib/game/orchestration";
 import { submitGuess } from "@/lib/game";
 
 export async function POST(
@@ -17,17 +17,15 @@ export async function POST(
 
   const admin = createAdminClient();
   await advanceIfDue(admin, gameId);
-  const loaded = await loadGameState(admin, gameId);
-  if (!loaded) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const { state, version } = loaded;
-  if (state.phase !== "guess")
-    return NextResponse.json({ error: "wrong_phase" }, { status: 409 });
-  // only the ejected imposter may guess
-  if (state.ejectedThisRound !== auth.user.id)
-    return NextResponse.json({ error: "not_guesser" }, { status: 403 });
+  const result = await mutateGame(admin, gameId, (state) => {
+    if (state.phase !== "guess") throw new Error("wrong_phase");
+    if (state.ejectedThisRound !== auth.user.id) throw new Error("not_guesser");
+    return submitGuess(state, text);
+  });
 
-  const next = submitGuess(state, text);
-  await persist(admin, gameId, version, next);
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: errorStatus(result.error) });
+  }
   return NextResponse.json({ ok: true });
 }

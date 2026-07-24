@@ -8,6 +8,7 @@ import {
   loadGameState,
   persist,
   advanceIfDue,
+  mutateGame,
 } from "@/lib/game/orchestration";
 import {
   submitClue,
@@ -19,6 +20,8 @@ import {
   currentCluePlayer,
   livingIds,
   livingImposters,
+  livingCrew,
+  allLivingVoted,
   makeRng,
   type GameState,
 } from "@/lib/game";
@@ -33,6 +36,7 @@ for (const line of readFileSync(resolve(here, "../../../.env.local"), "utf8").sp
 type Admin = ReturnType<typeof createAdminClient>;
 let admin: Admin;
 const createdUsers: string[] = [];
+const createdLobbies: string[] = [];
 
 async function mkUsers(n: number): Promise<string[]> {
   const ids: string[] = [];
@@ -60,6 +64,7 @@ async function mkLobby(userIds: string[]): Promise<string> {
     .select("id")
     .single();
   if (error || !lobby) throw new Error(`lobby: ${error?.message}`);
+  createdLobbies.push(lobby.id);
   for (const uid of userIds) {
     await admin.from("lobby_players").insert({ lobby_id: lobby.id, player_id: uid });
   }
@@ -113,6 +118,11 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
+  // delete lobbies first — cascades games/rounds so no round FK blocks the user
+  // delete (rounds.ejected_player_id / current_turn_player_id lack ON DELETE).
+  for (const lobbyId of createdLobbies) {
+    await admin.from("lobbies").delete().eq("id", lobbyId);
+  }
   for (const uid of createdUsers) {
     await admin.auth.admin.deleteUser(uid).catch(() => {});
   }
@@ -216,4 +226,68 @@ describe("game e2e (live DB, real orchestration)", () => {
     // exactly one transition persisted despite two concurrent callers
     expect((g1!.version as number) - (g0!.version as number)).toBe(1);
   });
+
+  it("concurrent votes: naive single-persist DROPS all but one (reproduces the bug)", async () => {
+    const users = await mkUsers(4);
+    const gameId = await startGame(admin, await mkLobby(users), 4);
+    await toVotePhase(gameId);
+
+    // Simulate the old route: every voter loads the SAME version, then persists.
+    const base = await loadGameState(admin, gameId);
+    if (!base) throw new Error("no state");
+    const living = livingIds(base.state);
+    const target = living[0];
+    const results = await Promise.all(
+      living.map((v) => persist(admin, gameId, base.version, submitVote(base.state, v, target))),
+    );
+    const landed = results.filter((r) => r !== -1).length;
+    expect(landed).toBe(1); // 3 of 4 votes silently dropped by the CAS
+  });
+
+  it("concurrent votes via mutateGame: ALL register → plurality ejected (the fix)", async () => {
+    const users = await mkUsers(4);
+    const gameId = await startGame(admin, await mkLobby(users), 4);
+    await toVotePhase(gameId);
+
+    const before = await loadGameState(admin, gameId);
+    if (!before) throw new Error("no state");
+    const voters = livingIds(before.state);
+    const target = livingCrew(before.state)[0].id; // eject a crew member (no guess phase)
+
+    // all four vote at once through the retrying mutate path
+    const outcomes = await Promise.all(
+      voters.map((voter) =>
+        mutateGame(admin, gameId, (s) => {
+          if (s.phase !== "vote") throw new Error("wrong_phase");
+          let next = submitVote(s, voter, target);
+          if (allLivingVoted(next)) next = closeVote(next);
+          return next;
+        }),
+      ),
+    );
+    // no vote was dropped
+    expect(outcomes.every((o) => "ok" in o)).toBe(true);
+
+    const after = await loadGameState(admin, gameId);
+    expect(after!.state.phase).toBe("reveal");
+    expect(after!.state.ejectedThisRound).toBe(target); // 4/4 plurality ejected
+  });
 });
+
+/** Drive a fresh game from the deal to the start of its vote phase. */
+async function toVotePhase(gameId: string): Promise<void> {
+  for (let guard = 0; guard < 30; guard++) {
+    const l = await loadGameState(admin, gameId);
+    if (!l) throw new Error("no state");
+    if (l.state.phase === "vote") return;
+    if (l.state.phase === "clue") {
+      const p = currentCluePlayer(l.state)!;
+      await persist(admin, gameId, l.version, submitClue(l.state, p, `c-${p.slice(0, 4)}`));
+    } else if (l.state.phase === "discussion") {
+      await persist(admin, gameId, l.version, startVote(l.state));
+    } else {
+      throw new Error(`unexpected phase ${l.state.phase}`);
+    }
+  }
+  throw new Error("never reached vote phase");
+}

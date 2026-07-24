@@ -234,43 +234,88 @@ export function ChatPanel({
 export function VotePanel({
   roster,
   userId,
-  myVote,
-  onVote,
+  selectedTarget, // undefined = nothing picked, null = skip picked, id = target
+  votedTarget, // undefined = not registered yet, null = skipped, id = target
+  progress,
+  busy,
+  onSelect,
+  onConfirm,
+  onChange,
 }: {
   roster: RosterPlayer[];
   userId: string;
-  myVote: string | null | undefined; // undefined = not voted, null = skipped
-  onVote: (targetId: string | null) => void;
+  selectedTarget: string | null | undefined;
+  votedTarget: string | null | undefined;
+  progress: { voted: number; living: number } | null;
+  busy: boolean;
+  onSelect: (targetId: string | null) => void;
+  onConfirm: () => void;
+  onChange: () => void;
 }) {
   const living = roster.filter((r) => r.alive);
-  const hasVoted = myVote !== undefined;
+  const registered = votedTarget !== undefined;
+  const votedLabel =
+    votedTarget === null ? "SKIP" : nameOf(roster, votedTarget ?? null);
+
   return (
     <section className="flex flex-col gap-3">
-      <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
-        vote to eject
+      <div className="flex items-center justify-between">
+        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+          vote to eject
+        </div>
+        {progress && (
+          <div className="font-utility text-[11px] text-ink">
+            {progress.voted}/{progress.living} voted
+          </div>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {living
-          .filter((p) => p.player_id !== userId)
-          .map((p) => {
-            const sel = myVote === p.player_id;
-            return (
-              <button
-                key={p.player_id}
-                onClick={() => onVote(p.player_id)}
-                className={`wobble-sketch border-[2.5px] px-3 py-3 font-display text-[18px] ${sel ? "border-hot bg-hot text-card" : "border-ink bg-card"}`}
-              >
-                {(p.display_name ?? "?").toUpperCase()}
-              </button>
-            );
-          })}
-      </div>
-      <button
-        onClick={() => onVote(null)}
-        className={`wobble-1 border-2 px-3 py-2 font-utility text-[13px] ${hasVoted && myVote === null ? "border-ink bg-ink text-paper" : "border-ink"}`}
-      >
-        skip
-      </button>
+
+      {registered ? (
+        // REGISTERED — visually distinct from a mere selection (solid ink + ✓)
+        <div className="flex flex-col gap-2">
+          <div className="wobble-sketch flex items-center justify-center gap-2 border-[2.5px] border-ink bg-ink px-3 py-3 font-display text-[18px] text-paper">
+            ✓ voted: {votedLabel}
+          </div>
+          <button
+            onClick={onChange}
+            className="wobble-1 self-center border-2 border-ink px-3 py-1.5 font-utility text-[12px] hover:bg-ink hover:text-paper"
+          >
+            change vote
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {living
+              .filter((p) => p.player_id !== userId)
+              .map((p) => {
+                const sel = selectedTarget === p.player_id;
+                return (
+                  <button
+                    key={p.player_id}
+                    onClick={() => onSelect(p.player_id)}
+                    className={`wobble-sketch border-[2.5px] px-3 py-3 font-display text-[18px] ${sel ? "border-dashed border-hot bg-card text-hot" : "border-ink bg-card"}`}
+                  >
+                    {(p.display_name ?? "?").toUpperCase()}
+                  </button>
+                );
+              })}
+          </div>
+          <button
+            onClick={() => onSelect(null)}
+            className={`wobble-1 border-2 px-3 py-2 font-utility text-[13px] ${selectedTarget === null ? "border-dashed border-hot text-hot" : "border-ink"}`}
+          >
+            skip
+          </button>
+          <Button
+            variant="accuse"
+            disabled={selectedTarget === undefined || busy}
+            onClick={onConfirm}
+          >
+            {busy ? "voting…" : "confirm vote"}
+          </Button>
+        </>
+      )}
     </section>
   );
 }

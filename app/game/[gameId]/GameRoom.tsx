@@ -88,7 +88,10 @@ export default function GameRoom({
   const [winner, setWinner] = useState(initialWinner);
   const [error, setError] = useState<string | null>(null);
   const [clueText, setClueText] = useState("");
-  const [vote, setVote] = useState<{ round: number; target: string | null } | null>(null);
+  const [selected, setSelected] = useState<{ round: number; target: string | null } | null>(null);
+  const [voted, setVoted] = useState<{ round: number; target: string | null } | null>(null);
+  const [voteBusy, setVoteBusy] = useState(false);
+  const [voteProgress, setVoteProgress] = useState<{ voted: number; living: number } | null>(null);
 
   const [ready, setReady] = useState<boolean>(
     () => typeof window !== "undefined" && !!sessionStorage.getItem(`dealt:${gameId}`),
@@ -147,6 +150,11 @@ export default function GameRoom({
     if (data) setRoleCard(data as unknown as RoleCard);
   }, [supabase, gameId]);
 
+  const refreshVoteProgress = useCallback(async () => {
+    const { data } = await supabase.rpc("get_vote_progress", { p_game: gameId });
+    if (data) setVoteProgress(data as unknown as { voted: number; living: number });
+  }, [supabase, gameId]);
+
   // --- realtime -------------------------------------------------------------
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
@@ -155,6 +163,7 @@ export default function GameRoom({
       .on("postgres_changes", { event: "*", schema: "public", table: "rounds", filter: `game_id=eq.${gameId}` }, () => {
         refreshRound();
         refreshRoster();
+        refreshVoteProgress(); // each vote rewrites the round row → live counter
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "clues" }, () => refreshRound())
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages", filter: `game_id=eq.${gameId}` }, () => refreshChat())
@@ -175,7 +184,12 @@ export default function GameRoom({
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, gameId, lobbyId, refreshRound, refreshRoster, refreshChat, refreshRoleCard, router]);
+  }, [supabase, gameId, lobbyId, refreshRound, refreshRoster, refreshChat, refreshRoleCard, refreshVoteProgress, router]);
+
+  // fetch the vote counter on entering the vote phase (realtime keeps it live)
+  useEffect(() => {
+    if (round?.phase === "vote") refreshVoteProgress();
+  }, [round?.phase, round?.round_number, refreshVoteProgress]);
 
   // --- server-authoritative timer trigger (idempotent on the server) --------
   const advancedForRef = useRef<string | null>(null);
@@ -190,7 +204,7 @@ export default function GameRoom({
 
   // --- actions --------------------------------------------------------------
   const postAction = useCallback(
-    async (path: string, body: unknown) => {
+    async (path: string, body: unknown): Promise<boolean> => {
       const r = await fetch(`/api/game/${gameId}/${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -199,9 +213,10 @@ export default function GameRoom({
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         setError(actionError(String(j.error ?? "error")));
-      } else {
-        setError(null);
+        return false;
       }
+      setError(null);
+      return true;
     },
     [gameId],
   );
@@ -210,10 +225,20 @@ export default function GameRoom({
     postAction("clue", { text: clueText });
     setClueText("");
   };
-  const doVote = (target: string | null) => {
-    if (round) setVote({ round: round.round_number, target });
-    postAction("vote", { targetId: target });
+  const selectTarget = (target: string | null) => {
+    if (round) setSelected({ round: round.round_number, target });
   };
+  const confirmVote = async () => {
+    if (!round || !selected || selected.round !== round.round_number) return;
+    setVoteBusy(true);
+    const ok = await postAction("vote", { targetId: selected.target });
+    setVoteBusy(false);
+    if (ok) {
+      setVoted({ round: round.round_number, target: selected.target });
+      refreshVoteProgress();
+    }
+  };
+  const changeVote = () => setVoted(null);
   const doGuess = (text: string) => postAction("guess", { text });
   const sendChat = (text: string) =>
     supabase.rpc("send_chat", { p_game: gameId, p_content: text }).then(({ error }) => {
@@ -350,8 +375,21 @@ export default function GameRoom({
               <VotePanel
                 roster={roster}
                 userId={userId}
-                myVote={vote && vote.round === round?.round_number ? vote.target : undefined}
-                onVote={doVote}
+                selectedTarget={
+                  selected && selected.round === round?.round_number
+                    ? selected.target
+                    : undefined
+                }
+                votedTarget={
+                  voted && voted.round === round?.round_number
+                    ? voted.target
+                    : undefined
+                }
+                progress={voteProgress}
+                busy={voteBusy}
+                onSelect={selectTarget}
+                onConfirm={confirmVote}
+                onChange={changeVote}
               />
             ) : (
               <div className="py-4 text-center font-body text-[16px] text-muted">

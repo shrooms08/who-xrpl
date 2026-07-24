@@ -175,6 +175,37 @@ export async function persist(
   return data as number;
 }
 
+export type MutateResult = { ok: true } | { error: string };
+
+/**
+ * Apply a player action under optimistic concurrency: load → apply → persist,
+ * RETRYING on a version-CAS conflict (persist === -1). Without this, two players
+ * acting at once both load the same version and only the first write lands — the
+ * rest silently drop (the bug that made concurrent votes never register). The
+ * `apply` callback re-runs each attempt on fresh state, so it must also perform
+ * phase/authorization checks (throw on failure) so they're re-validated on retry.
+ */
+export async function mutateGame(
+  admin: Admin,
+  gameId: string,
+  apply: (state: GameState) => GameState,
+): Promise<MutateResult> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const loaded = await loadGameState(admin, gameId);
+    if (!loaded) return { error: "not_found" };
+    let next: GameState;
+    try {
+      next = apply(loaded.state);
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+    const v = await persist(admin, gameId, loaded.version, next);
+    if (v !== -1) return { ok: true }; // landed
+    // CAS conflict — another writer advanced; reload and retry
+  }
+  return { error: "conflict" };
+}
+
 /** Host-validated start: atomically claim the lobby, deal roles + word, persist. */
 export async function startGame(
   admin: Admin,

@@ -480,6 +480,7 @@ export type Database = {
       }
       get_my_role_card: { Args: { p_game: string }; Returns: Json }
       get_my_word: { Args: { p_game: string }; Returns: string }
+      get_vote_progress: { Args: { p_game: string }; Returns: Json }
       is_game_member: { Args: { p_game: string }; Returns: boolean }
       is_lobby_member: { Args: { p_lobby: string }; Returns: boolean }
       is_round_member: { Args: { p_round: string }; Returns: boolean }
