@@ -48,18 +48,20 @@ export default function LoginForm({ next }: { next: string }) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    // try the email-OTP type, then the magiclink type (covers admin-issued codes)
-    let { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "email",
-    });
-    if (error) {
+    // The same 6-digit code is issued under different OTP types depending on the
+    // account: "email"/"magiclink" for a returning user (and admin-issued codes),
+    // but "signup" for a BRAND-NEW account's "Confirm signup" email. GoTrue matches
+    // the token AND the type, so a wrong-type attempt just returns invalid and
+    // leaves the code usable — we try each in turn until one lands.
+    const otpTypes = ["email", "magiclink", "signup"] as const;
+    let error: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>["error"] = null;
+    for (const type of otpTypes) {
       ({ error } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token: code.trim(),
-        type: "magiclink",
+        type,
       }));
+      if (!error) break;
     }
     setBusy(false);
     if (error) {
