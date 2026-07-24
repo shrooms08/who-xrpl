@@ -25,15 +25,13 @@ const utility = Special_Elite({
 // Base for absolute OG/icon URLs. Prefer an explicit app URL, then the Vercel
 // production/preview domain (so link previews work before the custom domain is
 // live), then localhost.
+const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 const metaBase =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NODE_ENV === "production"
-        ? "https://playwho.xyz" // never leak localhost into a prod build
-        : "http://localhost:3000");
+  appUrl && !appUrl.includes("localhost")
+    ? appUrl // explicit canonical (e.g. https://playwho.xyz)
+    : process.env.NODE_ENV === "production"
+      ? "https://playwho.xyz" // never leak a stale localhost value into prod OG
+      : "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(metaBase),
