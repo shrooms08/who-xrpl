@@ -31,7 +31,9 @@ const metaBase =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
+      : process.env.NODE_ENV === "production"
+        ? "https://playwho.xyz" // never leak localhost into a prod build
+        : "http://localhost:3000");
 
 export const metadata: Metadata = {
   metadataBase: new URL(metaBase),
