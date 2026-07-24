@@ -11,12 +11,15 @@ import { Chip } from "@/components/ui/Chip";
 import { CodeEntry } from "@/components/ui/CodeEntry";
 import { Toast } from "@/components/ui/Toast";
 import { AvatarChip } from "@/components/ui/AvatarChip";
+import { SeatClaimButton, WalletLinkButton } from "./SeatClaim";
 
 export type Member = {
   playerId: string;
   joinedAt: string;
   displayName: string;
 };
+
+type Mode = "casual" | "onchain";
 
 const MIN_PLAYERS = 4;
 
@@ -26,16 +29,22 @@ export default function LobbyRoom({
   maxPlayers,
   initialHostId,
   initialStatus,
+  initialMode,
   userId,
   initialMembers,
+  initialClaims,
+  linkedAddress,
 }: {
   lobbyId: string;
   code: string;
   maxPlayers: number;
   initialHostId: string;
   initialStatus: string;
+  initialMode: Mode;
   userId: string;
   initialMembers: Member[];
+  initialClaims: string[];
+  linkedAddress: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -48,8 +57,10 @@ export default function LobbyRoom({
   const [copied, setCopied] = useState<string | null>(null);
   const [channelDown, setChannelDown] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
-  // Gate-1 visual only: On-chain seat-claim is wired in Gate 3.
-  const [mode, setMode] = useState<"casual" | "onchain">("casual");
+  // On-chain seat-claim (Gate 3). `mode` is persisted on the lobby.
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [claims, setClaims] = useState<Set<string>>(new Set(initialClaims));
+  const [walletAddress, setWalletAddress] = useState<string | null>(linkedAddress);
 
   const membersRef = useRef(initialMembers);
   const hostIdRef = useRef(initialHostId);
@@ -120,16 +131,33 @@ export default function LobbyRoom({
 
   /** Full lobby resync — used on reconnect / focus / bfcache restore. Also
    *  catches a missed in_game flip and forwards the player into the game. */
+  const refetchClaims = useCallback(async () => {
+    const { data } = await supabase
+      .from("ledger_events")
+      .select("player_id")
+      .eq("lobby_id", lobbyId)
+      .eq("event_type", "seat_claim")
+      .eq("verified", true);
+    setClaims(
+      new Set(
+        (data ?? [])
+          .map((c) => c.player_id)
+          .filter((p): p is string => p !== null),
+      ),
+    );
+  }, [supabase, lobbyId]);
+
   const refetchLobby = useCallback(async () => {
     const { data: l } = await supabase
       .from("lobbies")
-      .select("status, host_id")
+      .select("status, host_id, mode")
       .eq("id", lobbyId)
       .maybeSingle();
     if (l) {
       hostIdRef.current = l.host_id;
       setHostId(l.host_id);
       setStatus(l.status);
+      setMode(l.mode);
       if (l.status === "in_game") {
         const { data: g } = await supabase
           .from("games")
@@ -144,8 +172,8 @@ export default function LobbyRoom({
         }
       }
     }
-    await fetchMembers();
-  }, [supabase, lobbyId, fetchMembers, router]);
+    await Promise.all([fetchMembers(), refetchClaims()]);
+  }, [supabase, lobbyId, fetchMembers, refetchClaims, router]);
 
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
@@ -212,10 +240,11 @@ export default function LobbyRoom({
           filter: `id=eq.${lobbyId}`,
         },
         (payload) => {
-          const row = payload.new as { host_id: string; status: string };
+          const row = payload.new as { host_id: string; status: string; mode: Mode };
           hostIdRef.current = row.host_id;
           setHostId(row.host_id);
           setStatus(row.status);
+          if (row.mode) setMode(row.mode);
           if (row.status === "in_game") {
             // the game started — send every player into it
             supabase
@@ -346,15 +375,31 @@ export default function LobbyRoom({
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      setError(j?.error ? String(j.error) : "could not start the game.");
+      setError(
+        j?.error === "seat_claims_incomplete"
+          ? "everyone needs a verified seat claim first."
+          : j?.error
+            ? String(j.error)
+            : "could not start the game.",
+      );
       return;
     }
     if (j?.gameId) router.push(`/game/${j.gameId}`);
   }
 
-  const canStart = isHost && members.length >= MIN_PLAYERS;
+  async function changeMode(m: Mode) {
+    setMode(m); // optimistic; RLS lets only the host update
+    const { error } = await supabase.from("lobbies").update({ mode: m }).eq("id", lobbyId);
+    if (error) setError(lobbyErrorMessage(error));
+  }
+
+  const enoughPlayers = members.length >= MIN_PLAYERS;
+  const allClaimed =
+    mode === "casual" || members.every((m) => claims.has(m.playerId));
+  const canStart = isHost && enoughPlayers && allClaimed;
   const needed = Math.max(0, MIN_PLAYERS - members.length);
   const emptySlots = Math.max(0, maxPlayers - members.length);
+  const myClaimed = claims.has(userId);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-6 p-6">
@@ -409,24 +454,45 @@ export default function LobbyRoom({
         {copied && <Toast>{copied}</Toast>}
       </Card>
 
-      {/* mode toggle (host) — On-chain seat claims land in Gate 3 */}
+      {/* mode toggle (host only; persisted on the lobby) */}
       {isHost && (
         <div className="flex items-center gap-3">
           <span className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
             mode
           </span>
-          <button onClick={() => setMode("casual")} aria-pressed={mode === "casual"}>
+          <button onClick={() => changeMode("casual")} aria-pressed={mode === "casual"}>
             <Chip variant={mode === "casual" ? "solid" : "pending"}>casual</Chip>
           </button>
-          <button onClick={() => setMode("onchain")} aria-pressed={mode === "onchain"}>
+          <button onClick={() => changeMode("onchain")} aria-pressed={mode === "onchain"}>
             <Chip variant={mode === "onchain" ? "solid" : "pending"}>on-chain</Chip>
           </button>
         </div>
       )}
+
+      {/* on-chain: link a wallet, then claim your seat (12 drops) */}
       {mode === "onchain" && (
-        <p className="font-body text-[15px] text-muted">
-          on-chain seat claims are wired in Gate 3 — casual for now.
-        </p>
+        <Card wobble={3} className="flex flex-col gap-3 p-5">
+          <div className="flex items-center justify-between">
+            <span className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+              your seat
+            </span>
+            {myClaimed ? (
+              <Chip variant="verified">✓ seat claimed</Chip>
+            ) : (
+              <Chip variant="unclaimed">unclaimed</Chip>
+            )}
+          </div>
+          <WalletLinkButton
+            linkedAddress={walletAddress}
+            onLinked={(a) => setWalletAddress(a)}
+          />
+          {!myClaimed && (
+            <SeatClaimButton
+              lobbyId={lobbyId}
+              onVerified={() => setClaims((c) => new Set(c).add(userId))}
+            />
+          )}
+        </Card>
       )}
 
       {error && (
@@ -463,7 +529,9 @@ export default function LobbyRoom({
                 </span>
                 {m.playerId === hostId && <Chip variant="pending">host</Chip>}
                 {mode === "onchain" && (
-                  <Chip variant="unclaimed">unclaimed</Chip>
+                  <Chip variant={claims.has(m.playerId) ? "verified" : "unclaimed"}>
+                    {claims.has(m.playerId) ? "✓ seat" : "unclaimed"}
+                  </Chip>
                 )}
                 {showOffline && (
                   <span className="font-utility text-[11px] text-faded">
@@ -512,7 +580,9 @@ export default function LobbyRoom({
             </Button>
             {!canStart && (
               <p className="mt-2 text-center font-utility text-[12px] text-muted">
-                need {needed} more to start
+                {!enoughPlayers
+                  ? `need ${needed} more to start`
+                  : "waiting for every seat to be claimed"}
               </p>
             )}
           </>

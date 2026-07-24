@@ -211,6 +211,7 @@ export type Database = {
           event_type: string
           game_id: string | null
           id: string
+          lobby_id: string | null
           memo: string | null
           player_id: string | null
           tx_hash: string | null
@@ -222,6 +223,7 @@ export type Database = {
           event_type: string
           game_id?: string | null
           id?: string
+          lobby_id?: string | null
           memo?: string | null
           player_id?: string | null
           tx_hash?: string | null
@@ -233,6 +235,7 @@ export type Database = {
           event_type?: string
           game_id?: string | null
           id?: string
+          lobby_id?: string | null
           memo?: string | null
           player_id?: string | null
           tx_hash?: string | null
@@ -262,6 +265,7 @@ export type Database = {
           host_id: string
           id: string
           max_players: number
+          mode: Database["public"]["Enums"]["lobby_mode"]
           status: Database["public"]["Enums"]["lobby_status"]
         }
         Insert: {
@@ -270,6 +274,7 @@ export type Database = {
           host_id: string
           id?: string
           max_players?: number
+          mode?: Database["public"]["Enums"]["lobby_mode"]
           status?: Database["public"]["Enums"]["lobby_status"]
         }
         Update: {
@@ -278,6 +283,7 @@ export type Database = {
           host_id?: string
           id?: string
           max_players?: number
+          mode?: Database["public"]["Enums"]["lobby_mode"]
           status?: Database["public"]["Enums"]["lobby_status"]
         }
         Relationships: [
@@ -330,9 +336,9 @@ export type Database = {
         ]
       }
       profiles: {
-        Row: { created_at: string; display_name: string | null; id: string }
-        Insert: { created_at?: string; display_name?: string | null; id: string }
-        Update: { created_at?: string; display_name?: string | null; id?: string }
+        Row: { created_at: string; display_name: string | null; id: string; xrpl_address: string | null }
+        Insert: { created_at?: string; display_name?: string | null; id: string; xrpl_address?: string | null }
+        Update: { created_at?: string; display_name?: string | null; id?: string; xrpl_address?: string | null }
         Relationships: []
       }
       rounds: {
@@ -481,6 +487,10 @@ export type Database = {
       get_my_role_card: { Args: { p_game: string }; Returns: Json }
       get_my_word: { Args: { p_game: string }; Returns: string }
       get_vote_progress: { Args: { p_game: string }; Returns: Json }
+      has_verified_seat_claim: {
+        Args: { p_lobby: string; p_player: string }
+        Returns: boolean
+      }
       is_game_member: { Args: { p_game: string }; Returns: boolean }
       is_lobby_member: { Args: { p_lobby: string }; Returns: boolean }
       is_round_member: { Args: { p_round: string }; Returns: boolean }
@@ -496,6 +506,7 @@ export type Database = {
     }
     Enums: {
       game_status: "active" | "ended"
+      lobby_mode: "casual" | "onchain"
       lobby_status: "waiting" | "in_game" | "ended"
       player_role: "crew" | "imposter"
       round_phase:

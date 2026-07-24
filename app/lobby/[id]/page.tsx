@@ -19,7 +19,7 @@ export default async function LobbyPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name")
+    .select("display_name, xrpl_address")
     .eq("id", user.id)
     .maybeSingle();
   if (!profile?.display_name) redirect(`/onboarding?next=/lobby/${lobbyId}`);
@@ -27,7 +27,7 @@ export default async function LobbyPage({
   // RLS: only members/host can read the lobby. No row → not a member.
   const { data: lobby } = await supabase
     .from("lobbies")
-    .select("id, code, status, max_players, host_id")
+    .select("id, code, status, max_players, host_id, mode")
     .eq("id", lobbyId)
     .maybeSingle();
   if (!lobby) redirect("/?notmember=1");
@@ -68,6 +68,18 @@ export default async function LobbyPage({
       profs?.find((p) => p.id === r.player_id)?.display_name ?? "Player",
   }));
 
+  // on-chain: which players already hold a verified seat claim + my wallet
+  const { data: claimRows } = await supabase
+    .from("ledger_events")
+    .select("player_id")
+    .eq("lobby_id", lobbyId)
+    .eq("event_type", "seat_claim")
+    .eq("verified", true);
+  const initialClaims = (claimRows ?? [])
+    .map((c) => c.player_id)
+    .filter((p): p is string => p !== null);
+  const linkedAddress = profile.xrpl_address ?? null;
+
   return (
     <LobbyRoom
       lobbyId={lobby.id}
@@ -75,8 +87,11 @@ export default async function LobbyPage({
       maxPlayers={lobby.max_players}
       initialHostId={lobby.host_id}
       initialStatus={lobby.status}
+      initialMode={lobby.mode}
       userId={user.id}
       initialMembers={members}
+      initialClaims={initialClaims}
+      linkedAddress={linkedAddress}
     />
   );
 }

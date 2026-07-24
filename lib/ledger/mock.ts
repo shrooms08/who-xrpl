@@ -20,6 +20,10 @@ export class MockLedgerAdapter implements LedgerAdapter {
     return { id: `mock-seat-${lobbyId}-${playerId}` };
   }
 
+  async resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null> {
+    return { txHash: `MOCKTX-${requestId}` };
+  }
+
   async verifySeatClaim(txHash: string): Promise<SeatClaimVerification> {
     return {
       verified: true,

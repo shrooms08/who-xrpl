@@ -58,6 +58,12 @@ export class XrplTestnetAdapter implements LedgerAdapter {
     };
   }
 
+  async resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null> {
+    const payload = await this.xumm.payload.get(requestId);
+    if (!payload || !payload.meta.signed || !payload.response.txid) return null;
+    return { txHash: payload.response.txid };
+  }
+
   async verifySeatClaim(txHash: string): Promise<SeatClaimVerification> {
     const client = new Client(this.network);
     try {

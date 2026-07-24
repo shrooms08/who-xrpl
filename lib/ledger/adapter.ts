@@ -35,6 +35,9 @@ export interface LedgerAdapter {
 
   // --- seat claim (spec core) ---------------------------------------------
   createSeatClaimRequest(gameId: string, playerId: string): Promise<SignRequest>;
+  /** Resolve a sign request into the on-ledger tx hash once the user has
+   *  signed in Xaman (null if not yet signed). */
+  resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null>;
   verifySeatClaim(txHash: string): Promise<SeatClaimVerification>;
   getAccountInfo(address: string): Promise<AccountInfo>;
 

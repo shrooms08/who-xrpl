@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
   const { data: lobby } = await supabase
     .from("lobbies")
-    .select("id, host_id, max_players, status")
+    .select("id, host_id, max_players, status, mode")
     .eq("id", lobbyId)
     .maybeSingle();
   if (!lobby) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -28,13 +28,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "already_started" }, { status: 409 });
 
   const admin = createAdminClient();
-  const { count } = await admin
+  const { data: members } = await admin
     .from("lobby_players")
-    .select("*", { count: "exact", head: true })
+    .select("player_id")
     .eq("lobby_id", lobbyId);
-  const n = count ?? 0;
+  const n = members?.length ?? 0;
   if (n < MIN_PLAYERS || n > lobby.max_players)
     return NextResponse.json({ error: "bad_player_count" }, { status: 409 });
+
+  // On-chain lobbies: every starting player must hold a verified seat claim.
+  if (lobby.mode === "onchain") {
+    const { data: claims } = await admin
+      .from("ledger_events")
+      .select("player_id")
+      .eq("lobby_id", lobbyId)
+      .eq("event_type", "seat_claim")
+      .eq("verified", true);
+    const claimed = new Set((claims ?? []).map((c) => c.player_id));
+    const unclaimed = (members ?? []).some((m) => !claimed.has(m.player_id));
+    if (unclaimed)
+      return NextResponse.json({ error: "seat_claims_incomplete" }, { status: 409 });
+  }
 
   try {
     const gameId = await startGame(admin, lobbyId, lobby.max_players);
