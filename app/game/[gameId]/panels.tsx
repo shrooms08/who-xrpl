@@ -11,8 +11,11 @@ import { Splat } from "@/components/doodles/Splat";
 import {
   nameOf,
   initialOf,
+  dropsToXrp,
+  txExplorerUrl,
   type ChatView,
   type ClueView,
+  type PayoutView,
   type RoleCard as RoleCardT,
   type RosterPlayer,
   type RoundView,
@@ -432,19 +435,67 @@ export function GuessPanel({
   );
 }
 
+/** Per-winner payout affordance: calm amount chip (links the validated tx),
+ *  or a pending / failed / skipped state. Utility face, unobtrusive. */
+function PayoutChip({ payout }: { payout: PayoutView }) {
+  if (payout.status === "sent") {
+    const label = `◈ ${dropsToXrp(payout.amount_drops)} XRP`;
+    return payout.tx_hash ? (
+      <a
+        href={txExplorerUrl(payout.tx_hash)}
+        target="_blank"
+        rel="noreferrer"
+        title="view payout on the testnet explorer"
+      >
+        <Chip variant="verified" wobble={2}>
+          {label} ↗
+        </Chip>
+      </a>
+    ) : (
+      <Chip variant="verified" wobble={2}>
+        {label}
+      </Chip>
+    );
+  }
+  if (payout.status === "pending" || payout.status === "sending") {
+    return (
+      <Chip variant="pending" wobble={2}>
+        payout pending…
+      </Chip>
+    );
+  }
+  if (payout.status === "failed") {
+    return (
+      <Chip variant="hot" wobble={2}>
+        payout failed
+      </Chip>
+    );
+  }
+  return (
+    <Chip variant="unclaimed" wobble={2}>
+      payout skipped
+    </Chip>
+  );
+}
+
 export function EndScreen({
   roster,
   winner,
   word,
+  payouts,
   isHost,
   onPlayAgain,
 }: {
   roster: RosterPlayer[];
   winner: "crew" | "imposter" | null;
   word: string | null;
+  payouts: PayoutView[];
   isHost: boolean;
   onPlayAgain: () => void;
 }) {
+  const payoutOf = new Map(payouts.map((p) => [p.player_id, p]));
+  const onChain = payouts.length > 0;
+  const allSkipped = onChain && payouts.every((p) => p.status === "skipped");
   return (
     <div className="flex flex-col items-center gap-5 py-8">
       <div className="font-utility text-[13px] text-muted">game over</div>
@@ -457,24 +508,41 @@ export function EndScreen({
         the word was <span className="font-display">{word ?? "—"}</span>
       </div>
       <section className="flex w-full max-w-sm flex-col gap-2">
-        <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
-          full reveal
-        </div>
-        {roster.map((p) => (
-          <div key={p.player_id} className="flex items-center gap-3">
-            <AvatarChip
-              initial={(p.display_name?.[0] ?? "?").toUpperCase()}
-              state={p.alive ? "alive" : "dead"}
-              size={36}
-            />
-            <span className="flex-1 font-utility text-[13px]">
-              {(p.display_name ?? "?").toUpperCase()}
-            </span>
-            <Chip variant={p.role === "imposter" ? "hot" : "verified"}>
-              {p.role === "imposter" ? "imposter" : "crew"}
-            </Chip>
+        <div className="flex items-center justify-between">
+          <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+            full reveal
           </div>
-        ))}
+          {allSkipped && (
+            <div className="font-utility text-[10px] text-faded">
+              payouts skipped — pot empty
+            </div>
+          )}
+        </div>
+        {roster.map((p) => {
+          const payout = payoutOf.get(p.player_id);
+          return (
+            <div key={p.player_id} className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <AvatarChip
+                  initial={(p.display_name?.[0] ?? "?").toUpperCase()}
+                  state={p.alive ? "alive" : "dead"}
+                  size={36}
+                />
+                <span className="flex-1 font-utility text-[13px]">
+                  {(p.display_name ?? "?").toUpperCase()}
+                </span>
+                <Chip variant={p.role === "imposter" ? "hot" : "verified"}>
+                  {p.role === "imposter" ? "imposter" : "crew"}
+                </Chip>
+              </div>
+              {payout && (
+                <div className="flex items-center gap-2 pl-[48px]">
+                  <PayoutChip payout={payout} />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </section>
       {isHost ? (
         <Button variant="primary" onClick={onPlayAgain}>

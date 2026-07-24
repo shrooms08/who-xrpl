@@ -29,6 +29,19 @@ export const TIMERS = {
   reveal: 6, // ejection/guess result display before the round concludes
 } as const;
 
+// --- rewards (Gate 4, on-chain games only) ----------------------------------
+
+/** Reward pot per on-chain game, in drops (1 XRP = 1_000_000 drops on testnet).
+ *  Split equally among the winning side; the remainder (pot mod winners) goes to
+ *  the first winner deterministically. Casual games pay nothing. */
+export const GAME_POT_DROPS = 1_000_000;
+
+/** Balance the payout (sponsor pot) wallet must retain on top of the pot before
+ *  any payout runs — covers the XRPL account reserve + per-tx fees. If the pot
+ *  balance < GAME_POT_DROPS + this, payouts are skipped gracefully (the game-end
+ *  flow never crashes on a dry pot). */
+export const PAYOUT_RESERVE_DROPS = 2_000_000;
+
 /** Imposters for a game of `n` players. Throws outside the supported range. */
 export function imposterCount(n: number): number {
   const bracket = IMPOSTER_SCALING.find((b) => n >= b.min && n <= b.max);

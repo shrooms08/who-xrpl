@@ -1,7 +1,6 @@
 // Generated from the Supabase project schema (project ref wzpvdverwrqipxuequaf)
 // via the Supabase MCP `generate_typescript_types`. Regenerate after migrations
 // (do not hand-edit).
-
 export type Json =
   | string
   | number
@@ -11,6 +10,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -150,9 +151,21 @@ export type Database = {
         ]
       }
       game_secrets: {
-        Row: { category: string; game_id: string; word: string }
-        Insert: { category: string; game_id: string; word: string }
-        Update: { category?: string; game_id?: string; word?: string }
+        Row: {
+          category: string
+          game_id: string
+          word: string
+        }
+        Insert: {
+          category: string
+          game_id: string
+          word: string
+        }
+        Update: {
+          category?: string
+          game_id?: string
+          word?: string
+        }
         Relationships: [
           {
             foreignKeyName: "game_secrets_game_id_fkey"
@@ -250,6 +263,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ledger_events_lobby_id_fkey"
+            columns: ["lobby_id"]
+            isOneToOne: false
+            referencedRelation: "lobbies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ledger_events_player_id_fkey"
             columns: ["player_id"]
             isOneToOne: false
@@ -335,10 +355,79 @@ export type Database = {
           },
         ]
       }
+      payouts: {
+        Row: {
+          address: string
+          amount_drops: number
+          created_at: string
+          error: string | null
+          game_id: string
+          id: string
+          player_id: string
+          status: string
+          tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          amount_drops: number
+          created_at?: string
+          error?: string | null
+          game_id: string
+          id?: string
+          player_id: string
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          amount_drops?: number
+          created_at?: string
+          error?: string | null
+          game_id?: string
+          id?: string
+          player_id?: string
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
-        Row: { created_at: string; display_name: string | null; id: string; xrpl_address: string | null }
-        Insert: { created_at?: string; display_name?: string | null; id: string; xrpl_address?: string | null }
-        Update: { created_at?: string; display_name?: string | null; id?: string; xrpl_address?: string | null }
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          xrpl_address: string | null
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          xrpl_address?: string | null
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          xrpl_address?: string | null
+        }
         Relationships: []
       }
       rounds: {
@@ -458,7 +547,9 @@ export type Database = {
         ]
       }
     }
-    Views: { [_ in never]: never }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
       apply_game_state: {
         Args: {
@@ -471,9 +562,12 @@ export type Database = {
       }
       create_lobby: {
         Args: { p_max_players: number }
-        Returns: { code: string; id: string }[]
+        Returns: {
+          code: string
+          id: string
+        }[]
       }
-      gen_lobby_code: { Args: Record<PropertyKey, never>; Returns: string }
+      gen_lobby_code: { Args: never; Returns: string }
       get_game_roster: {
         Args: { p_game: string }
         Returns: {
@@ -500,7 +594,10 @@ export type Database = {
         Args: { p_absent_host: string; p_lobby: string }
         Returns: string
       }
-      send_chat: { Args: { p_content: string; p_game: string }; Returns: undefined }
+      send_chat: {
+        Args: { p_content: string; p_game: string }
+        Returns: undefined
+      }
       shares_lobby_with: { Args: { p_other: string }; Returns: boolean }
       touch_lobby_presence: { Args: { p_lobby: string }; Returns: undefined }
     }
@@ -518,7 +615,9 @@ export type Database = {
         | "guess"
         | "end"
     }
-    CompositeTypes: { [_ in never]: never }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
@@ -622,13 +721,39 @@ export type Enums<
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
 export const Constants = {
   public: {
     Enums: {
       game_status: ["active", "ended"],
+      lobby_mode: ["casual", "onchain"],
       lobby_status: ["waiting", "in_game", "ended"],
       player_role: ["crew", "imposter"],
-      round_phase: ["deal", "clue", "discussion", "vote", "reveal", "guess", "end"],
+      round_phase: [
+        "deal",
+        "clue",
+        "discussion",
+        "vote",
+        "reveal",
+        "guess",
+        "end",
+      ],
     },
   },
 } as const

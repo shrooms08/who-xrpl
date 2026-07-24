@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authGameMember, errorStatus } from "@/lib/game/api-auth";
 import { advanceIfDue, mutateGame } from "@/lib/game/orchestration";
+import { settleGameIfEnded } from "@/lib/ledger/payouts";
 import { submitVote, closeVote, allLivingVoted, livingIds } from "@/lib/game";
 
 export async function POST(
@@ -29,5 +30,8 @@ export async function POST(
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: errorStatus(result.error) });
   }
+  // Defensive: settle if this vote closed out into a terminal state (idempotent;
+  // cheap no-op when the game isn't ended).
+  await settleGameIfEnded(admin, gameId);
   return NextResponse.json({ ok: true });
 }

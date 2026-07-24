@@ -8,6 +8,7 @@ import GameRoom, {
   type RoundView,
   type ClueView,
   type ChatView,
+  type PayoutView,
 } from "./GameRoom";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,12 @@ export default async function GamePage({
     .eq("game_id", gameId)
     .order("created_at", { ascending: true });
 
+  // payouts (empty until an on-chain game ends + settles); RLS lets members read.
+  const { data: payouts } = await supabase
+    .from("payouts")
+    .select("player_id, amount_drops, status, tx_hash")
+    .eq("game_id", gameId);
+
   return (
     <GameRoom
       gameId={gameId}
@@ -92,6 +99,7 @@ export default async function GamePage({
       initialRound={(round ?? null) as RoundView | null}
       initialClues={clues}
       initialChat={(chat ?? []) as ChatView[]}
+      initialPayouts={(payouts ?? []) as PayoutView[]}
       serverNowIso={new Date().toISOString()}
     />
   );

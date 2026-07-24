@@ -24,10 +24,11 @@ import type {
   RoundView,
   ClueView,
   ChatView,
+  PayoutView,
   Role,
 } from "./types";
 
-export type { RoleCard, RosterPlayer, RoundView, ClueView, ChatView } from "./types";
+export type { RoleCard, RosterPlayer, RoundView, ClueView, ChatView, PayoutView } from "./types";
 
 const PHASE_LABEL: Record<string, string> = {
   clue: "CLUE TIME",
@@ -61,6 +62,7 @@ export default function GameRoom({
   initialRound,
   initialClues,
   initialChat,
+  initialPayouts,
   serverNowIso,
 }: {
   gameId: string;
@@ -74,6 +76,7 @@ export default function GameRoom({
   initialRound: RoundView | null;
   initialClues: ClueView[];
   initialChat: ChatView[];
+  initialPayouts: PayoutView[];
   serverNowIso: string;
 }) {
   const router = useRouter();
@@ -86,6 +89,7 @@ export default function GameRoom({
   const [chat, setChat] = useState(initialChat);
   const [status, setStatus] = useState(initialStatus);
   const [winner, setWinner] = useState(initialWinner);
+  const [payouts, setPayouts] = useState(initialPayouts);
   const [error, setError] = useState<string | null>(null);
   const [clueText, setClueText] = useState("");
   const [selected, setSelected] = useState<{ round: number; target: string | null } | null>(null);
@@ -177,6 +181,16 @@ export default function GameRoom({
     }
   }, [supabase, gameId]);
 
+  // Payouts land a few seconds after game-end (async settlement) — the poll
+  // below refetches so the paid chips flip pending → paid on their own.
+  const refreshPayouts = useCallback(async () => {
+    const { data } = await supabase
+      .from("payouts")
+      .select("player_id, amount_drops, status, tx_hash")
+      .eq("game_id", gameId);
+    if (data) setPayouts(data as PayoutView[]);
+  }, [supabase, gameId]);
+
   /** Pull the entire current server state. The single recovery primitive used
    *  by every self-heal path (reconnect, focus, bfcache restore, watchdog). */
   const refetchAll = useCallback(async () => {
@@ -187,8 +201,9 @@ export default function GameRoom({
       refreshGame(),
       refreshRoleCard(),
       refreshVoteProgress(),
+      refreshPayouts(),
     ]);
-  }, [refreshRound, refreshRoster, refreshChat, refreshGame, refreshRoleCard, refreshVoteProgress]);
+  }, [refreshRound, refreshRoster, refreshChat, refreshGame, refreshRoleCard, refreshVoteProgress, refreshPayouts]);
 
   // --- realtime -------------------------------------------------------------
   useEffect(() => {
@@ -209,6 +224,7 @@ export default function GameRoom({
         if (row.status === "ended") {
           refreshRoster();
           refreshRoleCard();
+          refreshPayouts();
         }
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "lobbies", filter: `id=eq.${lobbyId}` }, (payload) => {
@@ -400,6 +416,7 @@ export default function GameRoom({
           roster={roster}
           winner={winner}
           word={roleCard.word}
+          payouts={payouts}
           isHost={isHost}
           onPlayAgain={playAgain}
         />
