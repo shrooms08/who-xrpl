@@ -119,6 +119,9 @@ export default function LoginForm({ next }: { next: string }) {
       ) : (
         <form onSubmit={verify} className="flex flex-col items-center gap-4">
           <CodeEntry value={code} editable onChange={setCode} length={6} autoFocus />
+          <p className="-mt-1 text-center font-utility text-[11px] leading-snug text-faded">
+            sent from signin@playwho.xyz — check spam the first time.
+          </p>
           <Button type="submit" variant="primary" disabled={busy} className="w-full">
             {busy ? "verifying…" : "verify & continue"}
           </Button>
