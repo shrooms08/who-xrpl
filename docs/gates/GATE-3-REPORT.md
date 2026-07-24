@@ -1,7 +1,8 @@
 # Gate 3 — XRPL testnet seat-claim · Report
 
-**Status:** code-complete, awaiting review + the live-testnet acceptance (which
-needs your Xumm credentials — see §5). Supabase project `wzpvdverwrqipxuequaf`.
+**Status:** ✅ ACCEPTED — all four criteria proven, including a live testnet
+seat-claim signed in Xaman and verified on-ledger. Supabase project
+`wzpvdverwrqipxuequaf`.
 
 ---
 
@@ -33,7 +34,7 @@ supabase/migrations/0012_seat_claim_schema.sql       profiles.xrpl_address,
 | Criterion | Status | Evidence |
 |---|---|---|
 | On-chain lobby: a player without a verified seat claim cannot occupy a starting slot | ✅ PROVEN | The start route rejects with `seat_claims_incomplete` unless every member has a verified `seat_claim` in `ledger_events`. DB harness verified the exact gate: unclaimed member → **blocked**; all claimed → **allowed**; `has_verified_seat_claim` true/false correct. |
-| A real testnet tx from Xaman is verified and appears in `/admin/ledger` | ⏳ needs your creds | Fully built: `createSeatClaimRequest` (Xumm payload, 12-drop payment + memo) → sign in Xaman → `verifySeatClaim` reads the ledger and records the event. Requires `XUMM_API_KEY/SECRET` + an app testnet address (see §5) + a real Xaman signature — your manual step. |
+| A real testnet tx from Xaman is verified and appears in `/admin/ledger` | ✅ PROVEN | A real seat-claim was signed in Xaman and verified on the XRPL testnet — tx `6111F36B255A438736ED02E4ECF93CBFCF1F313B2CF59970415CA8167C5B604D` — and recorded as a verified `seat_claim` in `ledger_events` / `/admin/ledger`. With 4 players present and 3 unclaimed, **Start was correctly blocked** with the explicit "waiting for every seat to be claimed" message; **Casual-mode start was unaffected**. |
 | Entire Gate 2 test suite passes with `MockLedgerAdapter` | ✅ PROVEN | 42 engine tests green; the game engine imports nothing from `lib/ledger`, so it is fully insulated. |
 | Grep proof: no file outside `lib/ledger/` imports `xrpl` or `xumm` | ✅ PROVEN | `grep` over `app/ components/ lib/` → the only importers are inside `lib/ledger/`. |
 
@@ -68,21 +69,15 @@ supabase/migrations/0012_seat_claim_schema.sql       profiles.xrpl_address,
   screen.
 - `/admin/ledger` admin gating (decision 4).
 
-## 5. To finish the live-testnet acceptance — what I need from you
+## 5. Live-testnet acceptance — completed
 
-1. Create a Xaman/Xumm app at **apps.xumm.dev** and add to `.env.local`:
-   `XUMM_API_KEY=…`, `XUMM_API_SECRET=…`
-2. An **app testnet receiving address** (public) as `XRPL_APP_ADDRESS=…` — the
-   app never holds its key; it only watches for incoming 12-drop payments. I can
-   generate a testnet account via the faucet if you'd like, or use one you control.
-3. Flip `LEDGER_ADAPTER=xrpl-testnet` in `.env.local` (default stays `mock`).
+Configured `XUMM_API_KEY/SECRET` + `XRPL_APP_ADDRESS` (in `.env.local`, gitignored)
+and ran `LEDGER_ADAPTER=xrpl-testnet`: an on-chain lobby, Xaman wallet link, and a
+real 12-drop seat claim signed on-device and verified on the XRPL testnet
+(tx `6111F36B255A438736ED02E4ECF93CBFCF1F313B2CF59970415CA8167C5B604D`), shown in
+`/admin/ledger`. Start-gating and Casual behaviour confirmed (see §2).
 
-Then: create an on-chain lobby, link Xaman + claim a seat (sign the 12-drop
-payment on your phone), and confirm the verified claim shows in `/admin/ledger`
-and that Start unblocks only once everyone has claimed.
+## 6. Gate 3 — accepted
 
-## 6. Wait for approval
-
-Three of four acceptance criteria are proven now; the fourth is the credential-
-gated live-testnet run. Standing by for the Xumm creds / app address and your
-review before considering Gate 3 closed.
+All four acceptance criteria are proven. Gate 3 is closed. (Week-1 default stays
+`LEDGER_ADAPTER=mock` so casual play needs no XRPL access.)
