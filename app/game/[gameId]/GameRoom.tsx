@@ -92,6 +92,7 @@ export default function GameRoom({
   const [voted, setVoted] = useState<{ round: number; target: string | null } | null>(null);
   const [voteBusy, setVoteBusy] = useState(false);
   const [voteProgress, setVoteProgress] = useState<{ voted: number; living: number } | null>(null);
+  const [channelDown, setChannelDown] = useState(false);
 
   const [ready, setReady] = useState<boolean>(
     () => typeof window !== "undefined" && !!sessionStorage.getItem(`dealt:${gameId}`),
@@ -155,6 +156,31 @@ export default function GameRoom({
     if (data) setVoteProgress(data as unknown as { voted: number; living: number });
   }, [supabase, gameId]);
 
+  const refreshGame = useCallback(async () => {
+    const { data } = await supabase
+      .from("games")
+      .select("status, winner")
+      .eq("id", gameId)
+      .maybeSingle();
+    if (data) {
+      setStatus(data.status);
+      setWinner(data.winner as Role | null);
+    }
+  }, [supabase, gameId]);
+
+  /** Pull the entire current server state. The single recovery primitive used
+   *  by every self-heal path (reconnect, focus, bfcache restore, watchdog). */
+  const refetchAll = useCallback(async () => {
+    await Promise.all([
+      refreshRound(),
+      refreshRoster(),
+      refreshChat(),
+      refreshGame(),
+      refreshRoleCard(),
+      refreshVoteProgress(),
+    ]);
+  }, [refreshRound, refreshRoster, refreshChat, refreshGame, refreshRoleCard, refreshVoteProgress]);
+
   // --- realtime -------------------------------------------------------------
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
@@ -180,11 +206,59 @@ export default function GameRoom({
         const row = payload.new as { status: string };
         if (row.status === "waiting") router.replace(`/lobby/${lobbyId}`); // play-again
       })
-      .subscribe();
+      .subscribe((s) => {
+        if (s === "SUBSCRIBED") {
+          // (re)connected — reconcile with the server immediately
+          setChannelDown(false);
+          refetchAll();
+        } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
+          setChannelDown(true);
+        }
+      });
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, gameId, lobbyId, refreshRound, refreshRoster, refreshChat, refreshRoleCard, refreshVoteProgress, router]);
+  }, [supabase, gameId, lobbyId, refreshRound, refreshRoster, refreshChat, refreshRoleCard, refreshVoteProgress, refetchAll, router]);
+
+  // Self-heal on tab focus / visibility (Safari throttles background sockets)
+  // and on bfcache restore (Safari can serve a stale page without a server hit).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refetchAll();
+    };
+    const onFocus = () => refetchAll();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refetchAll(); // restored from bfcache → refetch current state
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [refetchAll]);
+
+  // Watchdog: if our view's phase deadline passed by >2s and we haven't moved,
+  // nudge the (idempotent) advance endpoint AND refetch — heals a client whose
+  // realtime feed stalled. Reads via refs so the interval is created once.
+  const roundRef = useRef(round);
+  useEffect(() => {
+    roundRef.current = round;
+  }, [round]);
+  useEffect(() => {
+    const i = setInterval(() => {
+      const r = roundRef.current;
+      if (!r || !r.phase_ends_at || r.phase === "end") return;
+      const overdueMs = Date.now() + skewRef.current - Date.parse(r.phase_ends_at);
+      if (overdueMs > 2000) {
+        fetch(`/api/game/${gameId}/advance`, { method: "POST" }).catch(() => {});
+        refetchAll();
+      }
+    }, 2500);
+    return () => clearInterval(i);
+  }, [gameId, refetchAll]);
 
   // fetch the vote counter on entering the vote phase (realtime keeps it live)
   useEffect(() => {
@@ -290,6 +364,13 @@ export default function GameRoom({
           </div>
         )}
       </header>
+
+      {channelDown && (
+        <div className="wobble-1 flex items-center gap-2 border-2 border-dashed border-faded bg-card px-3 py-1.5 font-utility text-[12px] text-muted">
+          <span className="h-2 w-2 animate-tickpulse rounded-full bg-faded" />
+          reconnecting… hold on
+        </div>
+      )}
 
       {error && (
         <div className="wobble-2 border-2 border-ink bg-card px-3 py-2 font-body text-[15px] text-ink">

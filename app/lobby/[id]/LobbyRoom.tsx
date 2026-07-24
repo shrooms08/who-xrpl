@@ -46,6 +46,7 @@ export default function LobbyRoom({
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [channelDown, setChannelDown] = useState(false);
   const [inviteUrl, setInviteUrl] = useState("");
   // Gate-1 visual only: On-chain seat-claim is wired in Gate 3.
   const [mode, setMode] = useState<"casual" | "onchain">("casual");
@@ -116,6 +117,35 @@ export default function LobbyRoom({
     },
     [userId],
   );
+
+  /** Full lobby resync — used on reconnect / focus / bfcache restore. Also
+   *  catches a missed in_game flip and forwards the player into the game. */
+  const refetchLobby = useCallback(async () => {
+    const { data: l } = await supabase
+      .from("lobbies")
+      .select("status, host_id")
+      .eq("id", lobbyId)
+      .maybeSingle();
+    if (l) {
+      hostIdRef.current = l.host_id;
+      setHostId(l.host_id);
+      setStatus(l.status);
+      if (l.status === "in_game") {
+        const { data: g } = await supabase
+          .from("games")
+          .select("id")
+          .eq("lobby_id", lobbyId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (g) {
+          router.replace(`/game/${g.id}`);
+          return;
+        }
+      }
+    }
+    await fetchMembers();
+  }, [supabase, lobbyId, fetchMembers, router]);
 
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
@@ -239,14 +269,37 @@ export default function LobbyRoom({
       )
       .subscribe(async (s) => {
         if (s === "SUBSCRIBED") {
+          setChannelDown(false);
           await channel?.track({ player_id: userId, online_at: Date.now() });
+          refetchLobby(); // reconcile on (re)connect
+        } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
+          setChannelDown(true);
         }
       });
 
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, lobbyId, userId, fetchMembers, isDesignatedReaper, router]);
+  }, [supabase, lobbyId, userId, fetchMembers, isDesignatedReaper, refetchLobby, router]);
+
+  // Self-heal on focus / visibility / bfcache restore.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refetchLobby();
+    };
+    const onFocus = () => refetchLobby();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refetchLobby();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [refetchLobby]);
 
   async function copyText(text: string, message: string) {
     try {
@@ -311,6 +364,13 @@ export default function LobbyRoom({
           leave
         </button>
       </header>
+
+      {channelDown && (
+        <div className="wobble-1 flex items-center gap-2 border-2 border-dashed border-faded bg-card px-3 py-1.5 font-utility text-[12px] text-muted">
+          <span className="h-2 w-2 animate-tickpulse rounded-full bg-faded" />
+          reconnecting… hold on
+        </div>
+      )}
 
       {/* invite */}
       <Card wobble={1} className="flex flex-col gap-3 p-5">
