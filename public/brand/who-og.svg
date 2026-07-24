@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <pattern id="ogdots" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="#000000" opacity="0.06"/>
+    </pattern>
+  </defs>
+  <rect x="0" y="0" width="1200" height="630" fill="#F6F0E2"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#ogdots)"/>
+
+  <!-- splat "?" on the left -->
+  <circle cx="304" cy="322" r="182" fill="#201D18" opacity="0.12"/>
+  <g fill="#D93B25">
+    <circle cx="300" cy="318" r="182"/>
+    <circle cx="470" cy="176" r="20"/>
+    <circle cx="506" cy="150" r="11"/>
+    <circle cx="150" cy="486" r="24"/>
+    <circle cx="452" cy="470" r="14"/>
+  </g>
+  <path d="M206 262 C198 166 388 160 389 274 C390 356 296 340 296 396"
+        fill="none" stroke="#FBF7EC" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="296" cy="452" r="29" fill="#FBF7EC"/>
+
+  <!-- wordmark + tagline + url -->
+  <text x="560" y="270" font-family="Permanent Marker" font-size="150" fill="#201D18">WHO<tspan fill="#D93B25">?</tspan></text>
+  <path d="M566 300 C620 288 690 306 748 296 812 286 880 304 936 296" fill="none" stroke="#201D18" stroke-width="6" stroke-linecap="round"/>
+  <text x="562" y="372" font-family="Patrick Hand" font-size="44" fill="#5C554A">find the imposter. win real XRP.</text>
+  <text x="562" y="470" font-family="Special Elite" font-size="34" fill="#201D18">playwho.xyz</text>
+</svg>
