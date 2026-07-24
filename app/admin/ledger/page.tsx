@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Logo } from "@/components/ui/Logo";
@@ -7,14 +7,23 @@ import { Chip } from "@/components/ui/Chip";
 
 export const dynamic = "force-dynamic";
 
-// Simple ledger listing (verified seat claims). Auth-gated to signed-in users;
-// reads via the service role. (Week-1 testnet — proper admin gating is later.)
+// Ledger listing (verified seat claims), read via the service role. Gated to an
+// ADMIN_EMAILS allowlist in production; any signed-in user may view it in dev.
 export default async function AdminLedgerPage() {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/admin/ledger");
+
+  const allow = (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const isAdmin =
+    process.env.NODE_ENV !== "production" ||
+    allow.includes((user.email ?? "").toLowerCase());
+  if (!isAdmin) notFound();
 
   const admin = createAdminClient();
   const { data: events } = await admin
