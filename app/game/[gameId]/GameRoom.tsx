@@ -93,6 +93,7 @@ export default function GameRoom({
   const [voteBusy, setVoteBusy] = useState(false);
   const [voteProgress, setVoteProgress] = useState<{ voted: number; living: number } | null>(null);
   const [channelDown, setChannelDown] = useState(false);
+  const [fetchFailing, setFetchFailing] = useState(false);
 
   const [ready, setReady] = useState<boolean>(
     () => typeof window !== "undefined" && !!sessionStorage.getItem(`dealt:${gameId}`),
@@ -109,10 +110,17 @@ export default function GameRoom({
   const secondsLeft = round?.phase_ends_at
     ? Math.max(0, Math.ceil((Date.parse(round.phase_ends_at) - serverNow) / 1000))
     : 0;
+  // We're behind if the channel errored OR our phase has been overdue for a
+  // while (realtime silently stalled — Brave/Safari). Drives the indicator.
+  const overdueMs =
+    round?.phase_ends_at && round.phase !== "end"
+      ? serverNow - Date.parse(round.phase_ends_at)
+      : 0;
+  const reconnecting = channelDown || fetchFailing || overdueMs > 3000;
 
   // --- refreshers -----------------------------------------------------------
   const refreshRound = useCallback(async () => {
-    const { data: r } = await supabase
+    const { data: r, error } = await supabase
       .from("rounds")
       .select(
         "id, round_number, phase, phase_ends_at, current_turn_player_id, turn_order, ejected_player_id, ejected_role, awaiting_guess, guess_correct",
@@ -121,6 +129,7 @@ export default function GameRoom({
       .order("round_number", { ascending: false })
       .limit(1)
       .maybeSingle();
+    setFetchFailing(!!error); // surface REST failures instead of silently no-op'ing
     if (r) {
       setRound(r as RoundView);
       const { data: c } = await supabase
@@ -240,23 +249,31 @@ export default function GameRoom({
     };
   }, [refetchAll]);
 
-  // Watchdog: if our view's phase deadline passed by >2s and we haven't moved,
-  // nudge the (idempotent) advance endpoint AND refetch — heals a client whose
-  // realtime feed stalled. Reads via refs so the interval is created once.
+  // Backstop poll — runs UNCONDITIONALLY, independent of channel status or the
+  // phase deadline. Realtime can connect yet silently deliver nothing (Brave
+  // Shields blocking the socket, Safari background throttling) with NO error to
+  // key off, so the reconnect callback is not a sufficient staleness signal, and
+  // a deadline-gated check does nothing while a stale view's deadline is still in
+  // the future (the round-start freeze). Every 3s we pull the whole server state
+  // — refetchAll() calls setState, which actually replaces what's rendered — and,
+  // if our deadline is overdue, also nudge the idempotent advance endpoint.
   const roundRef = useRef(round);
   useEffect(() => {
     roundRef.current = round;
   }, [round]);
   useEffect(() => {
-    const i = setInterval(() => {
+    const tick = () => {
+      if (document.visibilityState === "hidden") return; // focus/visibility cover wake
+      refetchAll();
       const r = roundRef.current;
-      if (!r || !r.phase_ends_at || r.phase === "end") return;
-      const overdueMs = Date.now() + skewRef.current - Date.parse(r.phase_ends_at);
-      if (overdueMs > 2000) {
-        fetch(`/api/game/${gameId}/advance`, { method: "POST" }).catch(() => {});
-        refetchAll();
+      if (r && r.phase_ends_at && r.phase !== "end") {
+        const overdueMs = Date.now() + skewRef.current - Date.parse(r.phase_ends_at);
+        if (overdueMs > 1500) {
+          fetch(`/api/game/${gameId}/advance`, { method: "POST" }).catch(() => {});
+        }
       }
-    }, 2500);
+    };
+    const i = setInterval(tick, 3000);
     return () => clearInterval(i);
   }, [gameId, refetchAll]);
 
@@ -365,10 +382,10 @@ export default function GameRoom({
         )}
       </header>
 
-      {channelDown && (
+      {reconnecting && (
         <div className="wobble-1 flex items-center gap-2 border-2 border-dashed border-faded bg-card px-3 py-1.5 font-utility text-[12px] text-muted">
           <span className="h-2 w-2 animate-tickpulse rounded-full bg-faded" />
-          reconnecting… hold on
+          {channelDown ? "reconnecting… hold on" : "catching up…"}
         </div>
       )}
 

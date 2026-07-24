@@ -301,6 +301,15 @@ export default function LobbyRoom({
     };
   }, [refetchLobby]);
 
+  // Unconditional backstop poll: realtime can connect yet silently deliver
+  // nothing, which would miss the in_game flip — so resync every 4s regardless.
+  useEffect(() => {
+    const i = setInterval(() => {
+      if (document.visibilityState !== "hidden") refetchLobby();
+    }, 4000);
+    return () => clearInterval(i);
+  }, [refetchLobby]);
+
   async function copyText(text: string, message: string) {
     try {
       await navigator.clipboard.writeText(text);
