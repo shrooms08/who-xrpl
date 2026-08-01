@@ -605,6 +605,30 @@ export type Database = {
       }
       random_face: { Args: never; Returns: Json }
       snapshot_game_faces: { Args: { p_game: string }; Returns: undefined }
+      get_career_stats: {
+        Args: never
+        Returns: {
+          games: number
+          wins: number
+          imposter_games: number
+          imposter_wins: number
+          earned_drops: number
+        }[]
+      }
+      get_match_history: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          game_id: string
+          ended_at: string
+          topic: string
+          player_count: number
+          my_role: Database["public"]["Enums"]["player_role"]
+          winner: Database["public"]["Enums"]["player_role"]
+          won: boolean
+          payout_drops: number | null
+          payout_tx: string | null
+        }[]
+      }
       get_my_role_card: { Args: { p_game: string }; Returns: Json }
       get_my_word: { Args: { p_game: string }; Returns: string }
       get_vote_progress: { Args: { p_game: string }; Returns: Json }

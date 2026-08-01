@@ -59,10 +59,12 @@ export default function ProfileComposer({
   userId,
   displayName,
   initialFace,
+  children,
 }: {
   userId: string;
   displayName: string;
   initialFace: FaceSpec | null;
+  children?: React.ReactNode;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -190,6 +192,8 @@ export default function ProfileComposer({
           {busy ? "saving…" : saved ? "saved ✓" : "save face"}
         </button>
       </div>
+
+      {children}
     </main>
   );
 }
