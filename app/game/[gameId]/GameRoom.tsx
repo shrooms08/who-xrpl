@@ -159,7 +159,7 @@ export default function GameRoom({
 
   const refreshRoster = useCallback(async () => {
     const { data } = await supabase.rpc("get_game_roster", { p_game: gameId });
-    if (data) setRoster(data as RosterPlayer[]);
+    if (data) setRoster(data as unknown as RosterPlayer[]);
   }, [supabase, gameId]);
 
   const refreshChat = useCallback(async () => {

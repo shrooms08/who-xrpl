@@ -112,6 +112,7 @@ export type Database = {
         Row: {
           alive: boolean
           created_at: string
+          face: Json | null
           game_id: string
           id: string
           player_id: string
@@ -121,6 +122,7 @@ export type Database = {
         Insert: {
           alive?: boolean
           created_at?: string
+          face?: Json | null
           game_id: string
           id?: string
           player_id: string
@@ -130,6 +132,7 @@ export type Database = {
         Update: {
           alive?: boolean
           created_at?: string
+          face?: Json | null
           game_id?: string
           id?: string
           player_id?: string
@@ -431,18 +434,21 @@ export type Database = {
         Row: {
           created_at: string
           display_name: string | null
+          face: Json | null
           id: string
           xrpl_address: string | null
         }
         Insert: {
           created_at?: string
           display_name?: string | null
+          face?: Json | null
           id: string
           xrpl_address?: string | null
         }
         Update: {
           created_at?: string
           display_name?: string | null
+          face?: Json | null
           id?: string
           xrpl_address?: string | null
         }
@@ -591,11 +597,14 @@ export type Database = {
         Returns: {
           alive: boolean
           display_name: string
+          face: Json
           player_id: string
           role: Database["public"]["Enums"]["player_role"]
           turn_order: number
         }[]
       }
+      random_face: { Args: never; Returns: Json }
+      snapshot_game_faces: { Args: { p_game: string }; Returns: undefined }
       get_my_role_card: { Args: { p_game: string }; Returns: Json }
       get_my_word: { Args: { p_game: string }; Returns: string }
       get_vote_progress: { Args: { p_game: string }; Returns: Json }

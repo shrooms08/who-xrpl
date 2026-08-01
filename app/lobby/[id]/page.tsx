@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LobbyRoom, { type Member } from "./LobbyRoom";
+import type { FaceSpec } from "@/components/faces/spec";
 
 export const dynamic = "force-dynamic";
 
@@ -58,15 +59,18 @@ export default async function LobbyPage({
 
   const ids = (memberRows ?? []).map((r) => r.player_id);
   const { data: profs } = ids.length
-    ? await supabase.from("profiles").select("id, display_name").in("id", ids)
-    : { data: [] as { id: string; display_name: string | null }[] };
+    ? await supabase.from("profiles").select("id, display_name, face").in("id", ids)
+    : { data: [] as { id: string; display_name: string | null; face: unknown }[] };
 
-  const members: Member[] = (memberRows ?? []).map((r) => ({
-    playerId: r.player_id,
-    joinedAt: r.joined_at,
-    displayName:
-      profs?.find((p) => p.id === r.player_id)?.display_name ?? "Player",
-  }));
+  const members: Member[] = (memberRows ?? []).map((r) => {
+    const prof = profs?.find((p) => p.id === r.player_id);
+    return {
+      playerId: r.player_id,
+      joinedAt: r.joined_at,
+      displayName: prof?.display_name ?? "Player",
+      face: (prof?.face as FaceSpec | null) ?? null,
+    };
+  });
 
   // on-chain: which players hold a live seat claim (a verified seat_claim not
   // superseded by a later seat_unclaim / wallet disconnect) + my wallet.

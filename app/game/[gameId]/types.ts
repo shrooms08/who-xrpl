@@ -1,3 +1,5 @@
+import type { FaceSpec } from "@/components/faces/spec";
+
 export type Role = "crew" | "imposter";
 export type Phase =
   | "deal"
@@ -18,6 +20,7 @@ export type RoleCard = {
 export type RosterPlayer = {
   player_id: string;
   display_name: string | null;
+  face: FaceSpec | null;
   alive: boolean;
   turn_order: number;
   role: Role | null;
@@ -70,3 +73,8 @@ export const initialOf = (
   const n = nameOf(roster, id);
   return n === "—" ? "?" : n[0];
 };
+
+export const faceOf = (
+  roster: RosterPlayer[],
+  id: string | null,
+): FaceSpec | null => roster.find((r) => r.player_id === id)?.face ?? null;

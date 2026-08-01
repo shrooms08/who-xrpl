@@ -17,11 +17,13 @@ import {
   CLUE_ROUNDS_OPTIONS,
   TOPIC_CATEGORIES,
 } from "@/lib/game";
+import type { FaceSpec } from "@/components/faces/spec";
 
 export type Member = {
   playerId: string;
   joinedAt: string;
   displayName: string;
+  face: FaceSpec | null;
 };
 
 type Mode = "casual" | "onchain";
@@ -166,15 +168,18 @@ export default function LobbyRoom({
       .order("joined_at", { ascending: true });
     const ids = (rows ?? []).map((r) => r.player_id);
     const { data: profs } = ids.length
-      ? await supabase.from("profiles").select("id, display_name").in("id", ids)
-      : { data: [] as { id: string; display_name: string | null }[] };
+      ? await supabase.from("profiles").select("id, display_name, face").in("id", ids)
+      : { data: [] as { id: string; display_name: string | null; face: unknown }[] };
     applyMembers(
-      (rows ?? []).map((r) => ({
-        playerId: r.player_id,
-        joinedAt: r.joined_at,
-        displayName:
-          profs?.find((p) => p.id === r.player_id)?.display_name ?? "Player",
-      })),
+      (rows ?? []).map((r) => {
+        const prof = profs?.find((p) => p.id === r.player_id);
+        return {
+          playerId: r.player_id,
+          joinedAt: r.joined_at,
+          displayName: prof?.display_name ?? "Player",
+          face: (prof?.face as FaceSpec | null) ?? null,
+        };
+      }),
     );
   }, [supabase, lobbyId, applyMembers]);
 
@@ -697,6 +702,7 @@ export default function LobbyRoom({
               >
                 <AvatarChip
                   initial={(m.displayName[0] ?? "?").toUpperCase()}
+                  face={m.face}
                   size={40}
                 />
                 <span className="font-utility text-[13px]">

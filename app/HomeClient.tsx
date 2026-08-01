@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CodeEntry } from "@/components/ui/CodeEntry";
 import { InkUnderline } from "@/components/doodles/InkUnderline";
+import { Face } from "@/components/faces/Face";
+import type { FaceSpec } from "@/components/faces/spec";
 
 type LobbyLite = {
   id: string;
@@ -21,10 +23,12 @@ type LobbyLite = {
 
 export default function HomeClient({
   displayName,
+  face,
   userId,
   lobbies,
 }: {
   displayName: string;
+  face: FaceSpec | null;
   userId: string;
   lobbies: LobbyLite[];
 }) {
@@ -86,9 +90,16 @@ export default function HomeClient({
         </button>
       </header>
 
-      <div className="font-utility text-[12px] text-muted">
-        signed in as {displayName}
-      </div>
+      <Link
+        href="/profile"
+        className="flex items-center gap-2 self-start font-utility text-[12px] text-muted hover:text-ink"
+      >
+        <Face spec={face} size={30} />
+        <span>
+          signed in as{" "}
+          <span className="font-display text-ink">{displayName}</span> · edit face
+        </span>
+      </Link>
 
       {error && (
         <Card wobble={3} className="px-4 py-3">

@@ -17,6 +17,17 @@
   --hot: #d93b25; /* imposter / accuse / danger */
   --calm: #1f7a5a; /* crew / safe / verified */
 
+  /* face-tint palette — head ground only, never state (see components/faces).
+     paper reuses --card; no tint reads red/green (reserved for roles). */
+  --face-butter: #f2e3b3;
+  --face-peach: #f2cbb3;
+  --face-blush: #efc3c8;
+  --face-lilac: #d9cbe8;
+  --face-sky: #bfd0e2;
+  --face-mint: #cde3e8;
+  --face-sand: #ddd6c8;
+  --face-clay: #e0b9a2;
+
   /* hard offset shadows — never blurred */
   --shadow-ink: 3px 3px 0 rgba(32, 29, 24, 0.19); /* standard */
   --shadow-hero: 6px 6px 0 var(--ink); /* comic hero */

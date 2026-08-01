@@ -8,9 +8,11 @@ import { AvatarChip } from "@/components/ui/AvatarChip";
 import { RoleCard } from "@/components/ui/RoleCard";
 import { PhaseTimer } from "@/components/ui/PhaseTimer";
 import { Splat } from "@/components/doodles/Splat";
+import { Face } from "@/components/faces/Face";
 import {
   nameOf,
   initialOf,
+  faceOf,
   dropsToXrp,
   txExplorerUrl,
   type ChatView,
@@ -122,6 +124,7 @@ export function TurnStrip({
             initial={(p.display_name?.[0] ?? "?").toUpperCase()}
             name={(p.display_name ?? "?").toUpperCase()}
             state={state}
+            face={p.face}
           />
         );
       })}
@@ -203,7 +206,10 @@ export function ChatPanel({
               key={m.id}
               className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
             >
-              <div className="px-1 font-utility text-[10px] text-muted">
+              <div
+                className={`flex items-center gap-1 px-1 font-utility text-[10px] text-muted ${mine ? "flex-row-reverse" : ""}`}
+              >
+                <Face spec={faceOf(roster, m.player_id)} size={18} />
                 {nameOf(roster, m.player_id)}
               </div>
               <div
@@ -312,8 +318,9 @@ export function VotePanel({
                   <button
                     key={p.player_id}
                     onClick={() => onSelect(p.player_id)}
-                    className={`wobble-sketch border-[2.5px] px-3 py-3 font-display text-[18px] ${sel ? "border-dashed border-hot bg-card text-hot" : "border-ink bg-card"}`}
+                    className={`wobble-sketch flex flex-col items-center gap-1.5 border-[2.5px] px-3 py-3 font-display text-[18px] ${sel ? "border-dashed border-hot bg-card text-hot" : "border-ink bg-card"}`}
                   >
+                    <Face spec={p.face} size={48} />
                     {(p.display_name ?? "?").toUpperCase()}
                   </button>
                 );
@@ -359,7 +366,12 @@ export function RevealScreen({
   return (
     <div className="relative flex flex-col items-center gap-4 py-8">
       <div className="font-utility text-[13px] text-muted">the group has decided</div>
-      <AvatarChip initial={initialOf(roster, ejected)} state="dead" size={54} />
+      <AvatarChip
+        initial={initialOf(roster, ejected)}
+        face={faceOf(roster, ejected)}
+        state="dead"
+        size={54}
+      />
       <div className="font-utility text-[13px]">{nameOf(roster, ejected)} was…</div>
       {isImp ? (
         <Splat>
@@ -540,6 +552,7 @@ export function EndScreen({
               <div className="flex items-center gap-3">
                 <AvatarChip
                   initial={(p.display_name?.[0] ?? "?").toUpperCase()}
+                  face={p.face}
                   state={p.alive ? "alive" : "dead"}
                   size={36}
                 />

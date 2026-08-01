@@ -284,6 +284,9 @@ export async function startGame(
     config,
   });
   await persist(admin, game.id, 0, state, true);
+  // Snapshot each player's current profile face into game_players — identity
+  // (name + face) is stable for the whole game; mid-game edits don't apply.
+  await admin.rpc("snapshot_game_faces", { p_game: game.id });
   return game.id;
 }
 

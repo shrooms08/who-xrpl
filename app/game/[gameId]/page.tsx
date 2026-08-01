@@ -98,7 +98,7 @@ export default async function GamePage({
       initialStatus={game.status}
       initialWinner={game.winner}
       initialRoleCard={roleCardJson as unknown as RoleCard}
-      initialRoster={(roster ?? []) as RosterPlayer[]}
+      initialRoster={(roster ?? []) as unknown as RosterPlayer[]}
       initialRound={(round ?? null) as RoundView | null}
       initialClues={clues}
       initialChat={(chat ?? []) as ChatView[]}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import HomeClient from "./HomeClient";
+import type { FaceSpec } from "@/components/faces/spec";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name")
+    .select("display_name, face")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -37,6 +38,7 @@ export default async function Home() {
   return (
     <HomeClient
       displayName={profile.display_name}
+      face={(profile.face as FaceSpec | null) ?? null}
       userId={user.id}
       lobbies={lobbies ?? []}
     />
