@@ -246,14 +246,20 @@ export function SeatClaimButton({
 
 export function WalletLinkButton({
   linkedAddress,
+  lobbyId,
   onLinked,
+  onDisconnected,
 }: {
   linkedAddress: string | null;
+  lobbyId: string;
   onLinked: (address: string) => void;
+  onDisconnected: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [req, setReq] = useState<SignReq | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   async function link() {
     setBusy(true);
@@ -279,11 +285,66 @@ export function WalletLinkButton({
     else if (address) onLinked(address);
   }
 
+  async function disconnect() {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      await fetch(`/api/wallet/disconnect`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lobbyId }),
+      });
+      onDisconnected();
+    } catch {
+      setError("couldn't disconnect — try again.");
+    } finally {
+      setDisconnecting(false);
+      setConfirming(false);
+    }
+  }
+
   if (linkedAddress) {
     return (
-      <span className="font-utility text-[11px] text-calm">
-        ✓ wallet {linkedAddress.slice(0, 6)}…{linkedAddress.slice(-4)}
-      </span>
+      <div className="flex flex-col items-start gap-2">
+        <div className="flex items-center gap-3">
+          <span className="font-utility text-[11px] text-calm">
+            ✓ wallet {linkedAddress.slice(0, 6)}…{linkedAddress.slice(-4)}
+          </span>
+          {!confirming && (
+            <button
+              onClick={() => setConfirming(true)}
+              className="font-utility text-[11px] text-faded underline hover:text-ink"
+            >
+              disconnect
+            </button>
+          )}
+        </div>
+        {confirming && (
+          <div className="wobble-1 flex flex-col gap-2 border-2 border-dashed border-ink bg-card px-3 py-2">
+            <span className="font-body text-[14px] text-ink">
+              disconnect this wallet? your seat claim will be dropped — you&apos;ll
+              re-link and claim again.
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={disconnect}
+                disabled={disconnecting}
+                className="wobble-sketch border-[2.5px] border-hot bg-hot px-3 py-1.5 font-display text-[14px] text-card disabled:opacity-50"
+              >
+                {disconnecting ? "disconnecting…" : "disconnect"}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={disconnecting}
+                className="wobble-2 border-2 border-ink px-3 py-1.5 font-utility text-[12px] hover:bg-ink hover:text-paper disabled:opacity-50"
+              >
+                keep wallet
+              </button>
+            </div>
+          </div>
+        )}
+        {error && <span className="font-body text-[13px] text-muted">{error}</span>}
+      </div>
     );
   }
   return (

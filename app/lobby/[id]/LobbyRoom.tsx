@@ -132,19 +132,29 @@ export default function LobbyRoom({
   /** Full lobby resync — used on reconnect / focus / bfcache restore. Also
    *  catches a missed in_game flip and forwards the player into the game. */
   const refetchClaims = useCallback(async () => {
+    // Latest-event-wins: a verified seat_claim counts only if no seat_unclaim
+    // (wallet disconnect) is at-or-after it — mirrors has_verified_seat_claim.
     const { data } = await supabase
       .from("ledger_events")
-      .select("player_id")
+      .select("player_id, event_type, verified, created_at")
       .eq("lobby_id", lobbyId)
-      .eq("event_type", "seat_claim")
-      .eq("verified", true);
-    setClaims(
-      new Set(
-        (data ?? [])
-          .map((c) => c.player_id)
-          .filter((p): p is string => p !== null),
-      ),
-    );
+      .in("event_type", ["seat_claim", "seat_unclaim"]);
+    const claimAt = new Map<string, number>();
+    const unclaimAt = new Map<string, number>();
+    for (const r of data ?? []) {
+      if (!r.player_id) continue;
+      const t = Date.parse(r.created_at);
+      if (r.event_type === "seat_claim" && r.verified) {
+        claimAt.set(r.player_id, Math.max(claimAt.get(r.player_id) ?? 0, t));
+      } else if (r.event_type === "seat_unclaim") {
+        unclaimAt.set(r.player_id, Math.max(unclaimAt.get(r.player_id) ?? 0, t));
+      }
+    }
+    const set = new Set<string>();
+    for (const [pid, ct] of claimAt) {
+      if ((unclaimAt.get(pid) ?? -1) < ct) set.add(pid);
+    }
+    setClaims(set);
   }, [supabase, lobbyId]);
 
   const refetchLobby = useCallback(async () => {
@@ -484,7 +494,16 @@ export default function LobbyRoom({
           </div>
           <WalletLinkButton
             linkedAddress={walletAddress}
+            lobbyId={lobbyId}
             onLinked={(a) => setWalletAddress(a)}
+            onDisconnected={() => {
+              setWalletAddress(null);
+              setClaims((c) => {
+                const n = new Set(c);
+                n.delete(userId);
+                return n;
+              });
+            }}
           />
           {!myClaimed && (
             <SeatClaimButton

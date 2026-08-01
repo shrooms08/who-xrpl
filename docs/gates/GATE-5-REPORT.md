@@ -74,6 +74,45 @@ Not cleared — awaiting the go-ahead (Part 2 will add in-app disconnect).
 
 ---
 
-## Part 2 — Wallet disconnect ⏳ (pending)
+## Part 2 — Wallet disconnect ✅ (STOP for review)
+
+### Affordance
+In the on-chain lobby's wallet UI (`WalletLinkButton`), a linked wallet now shows
+an ink-styled `disconnect` link. Clicking opens a two-step confirm (dashed-ink
+panel) that **states the consequence**: "disconnect this wallet? your seat claim
+will be dropped — you'll re-link and claim again." → `disconnect` / `keep wallet`.
+(No profile page exists; the wallet UI is the single, lobby-scoped home for this.)
+
+### Server — `/api/wallet/disconnect` (new)
+- Re-auths the caller.
+- Clears `profiles.xrpl_address` (RLS `profiles_update_self`; next claim re-links).
+- When called from an on-chain lobby the caller is a member of: inserts a
+  `seat_unclaim` **tombstone** row and deletes only **unverified** in-flight
+  `seat_claim` rows. **Verified claim rows are never modified** — the on-chain
+  payment record stays in `ledger_events` history untouched.
+
+### Claim semantics — "latest event wins" (migration 0014)
+A verified `seat_claim` counts only if no `seat_unclaim` for the same lobby+player
+is at-or-after it. Applied consistently:
+- `has_verified_seat_claim` rewritten (drives verify/reconcile idempotency).
+- Game-start gating (`/api/game/start`), lobby load (`page.tsx`), and live
+  `refetchClaims` all compute the same latest-event-wins set.
+- Additive only: existing rows are never touched, so disconnect can't destroy the
+  audit trail.
+
+### Interaction with Part 1
+After disconnect the player is unclaimed: reconcile finds no live claim (tombstone),
+no pending row (deleted), and `findSeatClaim` is scoped to the *current* wallet
+(now null / a new address), so the old-wallet payment is never re-adopted. They
+re-link and claim fresh. (Re-linking the *same* wallet auto-adopts the existing
+valid payment via reconcile — desirable, since that seat was genuinely paid.)
+
+### Tests
+- Predicate proved against synthetic rows: claimed-no-unclaim → true;
+  claimed-then-disconnected → false; disconnected-then-reclaimed → true;
+  only-pending → false.
+- `tsc` clean; build compiles; disconnect route registered; 49 unit tests pass.
+
+---
 
 ## Part 3 — Host settings ⏳ (pending)

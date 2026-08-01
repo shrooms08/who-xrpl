@@ -36,15 +36,30 @@ export async function POST(req: Request) {
   if (n < MIN_PLAYERS || n > lobby.max_players)
     return NextResponse.json({ error: "bad_player_count" }, { status: 409 });
 
-  // On-chain lobbies: every starting player must hold a verified seat claim.
+  // On-chain lobbies: every starting player must hold a LIVE seat claim — a
+  // verified seat_claim not superseded by a later seat_unclaim (wallet disconnect).
   if (lobby.mode === "onchain") {
-    const { data: claims } = await admin
+    const { data: events } = await admin
       .from("ledger_events")
-      .select("player_id")
+      .select("player_id, event_type, verified, created_at")
       .eq("lobby_id", lobbyId)
-      .eq("event_type", "seat_claim")
-      .eq("verified", true);
-    const claimed = new Set((claims ?? []).map((c) => c.player_id));
+      .in("event_type", ["seat_claim", "seat_unclaim"]);
+    const claimAt = new Map<string, number>();
+    const unclaimAt = new Map<string, number>();
+    for (const r of events ?? []) {
+      if (!r.player_id) continue;
+      const t = Date.parse(r.created_at);
+      if (r.event_type === "seat_claim" && r.verified) {
+        claimAt.set(r.player_id, Math.max(claimAt.get(r.player_id) ?? 0, t));
+      } else if (r.event_type === "seat_unclaim") {
+        unclaimAt.set(r.player_id, Math.max(unclaimAt.get(r.player_id) ?? 0, t));
+      }
+    }
+    const claimed = new Set(
+      [...claimAt.entries()]
+        .filter(([pid, ct]) => (unclaimAt.get(pid) ?? -1) < ct)
+        .map(([pid]) => pid),
+    );
     const unclaimed = (members ?? []).some((m) => !claimed.has(m.player_id));
     if (unclaimed)
       return NextResponse.json({ error: "seat_claims_incomplete" }, { status: 409 });

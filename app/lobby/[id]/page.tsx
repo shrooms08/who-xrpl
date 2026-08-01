@@ -68,16 +68,27 @@ export default async function LobbyPage({
       profs?.find((p) => p.id === r.player_id)?.display_name ?? "Player",
   }));
 
-  // on-chain: which players already hold a verified seat claim + my wallet
+  // on-chain: which players hold a live seat claim (a verified seat_claim not
+  // superseded by a later seat_unclaim / wallet disconnect) + my wallet.
   const { data: claimRows } = await supabase
     .from("ledger_events")
-    .select("player_id")
+    .select("player_id, event_type, verified, created_at")
     .eq("lobby_id", lobbyId)
-    .eq("event_type", "seat_claim")
-    .eq("verified", true);
-  const initialClaims = (claimRows ?? [])
-    .map((c) => c.player_id)
-    .filter((p): p is string => p !== null);
+    .in("event_type", ["seat_claim", "seat_unclaim"]);
+  const claimAt = new Map<string, number>();
+  const unclaimAt = new Map<string, number>();
+  for (const r of claimRows ?? []) {
+    if (!r.player_id) continue;
+    const t = Date.parse(r.created_at);
+    if (r.event_type === "seat_claim" && r.verified) {
+      claimAt.set(r.player_id, Math.max(claimAt.get(r.player_id) ?? 0, t));
+    } else if (r.event_type === "seat_unclaim") {
+      unclaimAt.set(r.player_id, Math.max(unclaimAt.get(r.player_id) ?? 0, t));
+    }
+  }
+  const initialClaims = [...claimAt.entries()]
+    .filter(([pid, ct]) => (unclaimAt.get(pid) ?? -1) < ct)
+    .map(([pid]) => pid);
   const linkedAddress = profile.xrpl_address ?? null;
 
   return (
