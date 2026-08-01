@@ -24,6 +24,15 @@ export interface SeatClaimVerification {
   reason?: string; // populated when verified === false
 }
 
+/** The lifecycle of a sign request, resolved from the signing provider. A signed
+ *  payload's tx still needs a few ledger closes to VALIDATE — "signed" is not yet
+ *  "verified"; the caller must then verifySeatClaim(txHash) until it validates. */
+export type SeatClaimResolution =
+  | { state: "pending" } // not yet acted on in Xaman
+  | { state: "signed"; txHash: string } // signed + submitted (may not be validated yet)
+  | { state: "rejected" } // user declined the signature
+  | { state: "expired" }; // payload expired unsigned
+
 export interface AccountInfo {
   address: string;
   exists: boolean;
@@ -44,10 +53,20 @@ export interface LedgerAdapter {
 
   // --- seat claim (spec core) ---------------------------------------------
   createSeatClaimRequest(gameId: string, playerId: string): Promise<SignRequest>;
-  /** Resolve a sign request into the on-ledger tx hash once the user has
-   *  signed in Xaman (null if not yet signed). */
-  resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null>;
+  /** Resolve a sign request's lifecycle. A "signed" result carries the tx hash
+   *  but does NOT mean validated — signed ≠ verified (see SeatClaimResolution). */
+  resolveSeatClaim(requestId: string): Promise<SeatClaimResolution>;
   verifySeatClaim(txHash: string): Promise<SeatClaimVerification>;
+  /** Reconcile against the ledger: find an already-submitted seat-claim payment
+   *  carrying this lobby+player memo, so past/duplicate signs (or a claim made
+   *  before a client crash) are adopted instead of re-signed. `payerAddress`
+   *  scopes the search to the player's linked wallet; null → no search. Returns
+   *  the first validated match, or null when none is found. */
+  findSeatClaim(
+    lobbyId: string,
+    playerId: string,
+    payerAddress: string | null,
+  ): Promise<SeatClaimVerification | null>;
   getAccountInfo(address: string): Promise<AccountInfo>;
 
   // --- wallet link (Xaman sign-in) ----------------------------------------

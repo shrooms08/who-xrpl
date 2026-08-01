@@ -4,6 +4,7 @@ import {
   type AccountInfo,
   type LedgerAdapter,
   type PayoutResult,
+  type SeatClaimResolution,
   type SeatClaimVerification,
   type SignRequest,
 } from "./adapter";
@@ -23,8 +24,8 @@ export class MockLedgerAdapter implements LedgerAdapter {
     return { id: `mock-seat-${lobbyId}-${playerId}` };
   }
 
-  async resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null> {
-    return { txHash: `MOCKTX-${requestId}` };
+  async resolveSeatClaim(requestId: string): Promise<SeatClaimResolution> {
+    return { state: "signed", txHash: `MOCKTX-${requestId}` };
   }
 
   async verifySeatClaim(txHash: string): Promise<SeatClaimVerification> {
@@ -35,6 +36,12 @@ export class MockLedgerAdapter implements LedgerAdapter {
       deliveredDrops: SEAT_CLAIM_DROPS,
       memo: seatMemo("mock", "mock"),
     };
+  }
+
+  // Mock has no real ledger to scan; the create→sign path validates instantly,
+  // so reconciliation never needs to adopt a pre-existing payment.
+  async findSeatClaim(): Promise<SeatClaimVerification | null> {
+    return null;
   }
 
   async getAccountInfo(address: string): Promise<AccountInfo> {

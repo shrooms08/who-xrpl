@@ -6,6 +6,7 @@ import {
   type AccountInfo,
   type LedgerAdapter,
   type PayoutResult,
+  type SeatClaimResolution,
   type SeatClaimVerification,
   type SignRequest,
 } from "./adapter";
@@ -66,10 +67,17 @@ export class XrplTestnetAdapter implements LedgerAdapter {
     };
   }
 
-  async resolveSeatClaim(requestId: string): Promise<{ txHash: string } | null> {
+  async resolveSeatClaim(requestId: string): Promise<SeatClaimResolution> {
     const payload = await this.xumm.payload.get(requestId);
-    if (!payload || !payload.meta.signed || !payload.response.txid) return null;
-    return { txHash: payload.response.txid };
+    if (!payload) return { state: "expired" }; // unknown/gone payload
+    const meta = payload.meta;
+    if (meta.signed && payload.response.txid) {
+      return { state: "signed", txHash: payload.response.txid };
+    }
+    if (meta.expired) return { state: "expired" };
+    // resolved-but-not-signed (or explicitly cancelled) = the user declined.
+    if (meta.cancelled || (meta.resolved && !meta.signed)) return { state: "rejected" };
+    return { state: "pending" }; // still awaiting action in Xaman
   }
 
   async verifySeatClaim(txHash: string): Promise<SeatClaimVerification> {
@@ -111,6 +119,72 @@ export class XrplTestnetAdapter implements LedgerAdapter {
       };
     } catch (e) {
       return { verified: false, reason: (e as Error).message };
+    } finally {
+      if (client.isConnected()) await client.disconnect();
+    }
+  }
+
+  // Reconcile against the ledger: scan the payer's recent txns for a validated
+  // Payment to the app address carrying THIS seat memo. Best-effort — any error
+  // (unreachable node, unfunded payer) degrades to null so the caller falls back
+  // to the create→sign path. Never throws.
+  async findSeatClaim(
+    lobbyId: string,
+    playerId: string,
+    payerAddress: string | null,
+  ): Promise<SeatClaimVerification | null> {
+    if (!payerAddress) return null;
+    const wantMemo = seatMemo(lobbyId, playerId);
+    const client = new Client(this.network);
+    try {
+      await client.connect();
+      const resp = await client.request({
+        command: "account_tx",
+        account: payerAddress,
+        ledger_index_min: -1,
+        ledger_index_max: -1,
+        limit: 50,
+        forward: false, // most recent first
+      });
+      const txns =
+        ((resp.result as unknown as { transactions?: unknown[] }).transactions ??
+          []) as Record<string, unknown>[];
+      const matches: SeatClaimVerification[] = [];
+      for (const entry of txns) {
+        if (entry.validated !== true) continue;
+        const tx = (entry.tx ?? entry.tx_json ?? {}) as Record<string, unknown>;
+        const meta = entry.meta as Record<string, unknown> | undefined;
+        if (tx.TransactionType !== "Payment") continue;
+        if (tx.Destination !== this.appAddress) continue;
+        const memos = (tx.Memos as { Memo: { MemoData?: string } }[] | undefined) ?? [];
+        const memoHex = memos[0]?.Memo?.MemoData;
+        const memo = memoHex ? fromHex(memoHex) : undefined;
+        if (memo !== wantMemo) continue;
+        const delivered = meta?.delivered_amount ?? meta?.["DeliveredAmount"];
+        if (typeof delivered !== "string" || BigInt(delivered) < BigInt(SEAT_CLAIM_DROPS)) {
+          continue;
+        }
+        const hash = (entry.hash ?? tx.hash) as string | undefined;
+        if (!hash) continue;
+        matches.push({
+          verified: true,
+          txHash: hash,
+          account: payerAddress,
+          deliveredDrops: delivered,
+          memo,
+        });
+      }
+      if (matches.length === 0) return null;
+      if (matches.length > 1) {
+        // Duplicates from repeated signing: adopt the first, log the extras.
+        console.warn(
+          `[seat-claim] ${matches.length} matching payments for ${wantMemo}; adopting first, ignoring extras`,
+        );
+      }
+      return matches[0];
+    } catch (e) {
+      console.warn(`[seat-claim] findSeatClaim failed: ${(e as Error).message}`);
+      return null;
     } finally {
       if (client.isConnected()) await client.disconnect();
     }
