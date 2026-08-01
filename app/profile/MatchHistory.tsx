@@ -26,6 +26,10 @@ export type MatchRow = {
 const PAGE = 20;
 const xrp = (drops: number) =>
   (drops / 1_000_000).toFixed(6).replace(/\.?0+$/, "");
+// Compact form for the counter tile: ≤2 decimals, trailing zeros trimmed
+// ("1.33", "2", "123.46"). Full precision stays on tap (title) + in history.
+const xrpShort = (drops: number) =>
+  (drops / 1_000_000).toFixed(2).replace(/\.?0+$/, "");
 const explorer = (hash: string) =>
   `https://testnet.xrpl.org/transactions/${hash}`;
 const fmtDate = (iso: string | null) =>
@@ -33,11 +37,33 @@ const fmtDate = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : "—";
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+}) {
+  // Scale the number down for longer values (e.g. "123.46") so it never
+  // overflows the tile into its neighbour on a 390px screen. min-w-0 lets the
+  // grid cell shrink; overflow-hidden is the final guard.
+  const size =
+    value.length <= 4
+      ? "text-[21px]"
+      : value.length <= 6
+        ? "text-[15px]"
+        : "text-[12px]";
   return (
-    <div className="flex flex-col items-center gap-0.5 border-2 border-ink bg-card px-2 py-2">
-      <div className="font-display text-[22px] leading-none">{value}</div>
-      <div className="text-center font-utility text-[9px] uppercase tracking-[0.06em] text-muted">
+    <div className="flex min-w-0 flex-col items-center gap-0.5 overflow-hidden border-2 border-ink bg-card px-1 py-2">
+      <div
+        title={title}
+        className={`max-w-full font-display leading-none tabular-nums ${size}`}
+      >
+        {value}
+      </div>
+      <div className="text-center font-utility text-[8px] uppercase leading-tight tracking-[0.03em] text-muted">
         {label}
       </div>
     </div>
@@ -79,7 +105,11 @@ export default function MatchHistory({
         <Stat label="wins" value={String(initialStats.wins)} />
         <Stat label="as imp" value={String(initialStats.imposter_games)} />
         <Stat label="imp wins" value={String(initialStats.imposter_wins)} />
-        <Stat label="XRP won" value={xrp(initialStats.earned_drops)} />
+        <Stat
+          label="XRP won"
+          value={xrpShort(initialStats.earned_drops)}
+          title={`${xrp(initialStats.earned_drops)} XRP`}
+        />
       </div>
 
       {/* match history */}

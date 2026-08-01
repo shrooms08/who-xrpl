@@ -47,17 +47,70 @@ async function runSignFlow(
   return "timed out — try again";
 }
 
+// Is this the kind of device that has Xaman installed (→ deep-link works)? UA
+// first, viewport as a fallback. Defaults to false on the server so desktop's
+// QR-first render is the SSR default; flips on mount (well after hydration, and
+// SignPrompt only appears mid-claim after a tap anyway).
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    setMobile(
+      /Android|iPhone|iPad|iPod|Mobi/i.test(ua) ||
+        (typeof window !== "undefined" &&
+          window.matchMedia("(max-width: 640px)").matches),
+    );
+  }, []);
+  return mobile;
+}
+
 function SignPrompt({ req }: { req: SignReq }) {
+  const isMobile = useIsMobile();
+  const [showQr, setShowQr] = useState(false);
+  const qr = req.qrPng ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={req.qrPng}
+      alt="scan with Xaman"
+      className="wobble-1 h-40 w-40 border-2 border-ink"
+    />
+  ) : null;
+  const deeplinkBtn = req.deeplink ? (
+    <a
+      href={req.deeplink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="wobble-sketch border-[2.5px] border-hot bg-hot px-4 py-2.5 font-display text-[17px] text-card"
+    >
+      open in Xaman
+    </a>
+  ) : null;
+
+  // Mobile: a QR is unscannable on the same device — lead with the deep-link
+  // button; the QR collapses behind a "scan from another device" toggle.
+  if (isMobile) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        {deeplinkBtn}
+        {req.qrPng && (
+          <button
+            type="button"
+            onClick={() => setShowQr((v) => !v)}
+            className="font-utility text-[11px] text-muted underline"
+          >
+            {showQr ? "hide QR" : "scan from another device"}
+          </button>
+        )}
+        {showQr && qr}
+        <span className="font-utility text-[11px] text-muted">waiting for signature…</span>
+      </div>
+    );
+  }
+
+  // Desktop: QR-first, with the deep-link as a small link below.
   return (
     <div className="flex flex-col items-center gap-2">
-      {req.qrPng && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={req.qrPng}
-          alt="scan with Xaman"
-          className="wobble-1 h-40 w-40 border-2 border-ink"
-        />
-      )}
+      {qr}
       {req.deeplink && (
         <a
           href={req.deeplink}
