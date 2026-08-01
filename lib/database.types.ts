@@ -333,6 +333,7 @@ export type Database = {
       }
       lobby_players: {
         Row: {
+          grace_until: string | null
           id: string
           joined_at: string
           last_seen: string
@@ -340,6 +341,7 @@ export type Database = {
           player_id: string
         }
         Insert: {
+          grace_until?: string | null
           id?: string
           joined_at?: string
           last_seen?: string
@@ -347,6 +349,7 @@ export type Database = {
           player_id: string
         }
         Update: {
+          grace_until?: string | null
           id?: string
           joined_at?: string
           last_seen?: string
@@ -613,6 +616,7 @@ export type Database = {
         Args: { p_content: string; p_game: string }
         Returns: undefined
       }
+      set_claim_grace: { Args: { p_lobby: string }; Returns: undefined }
       shares_lobby_with: { Args: { p_other: string }; Returns: boolean }
       touch_lobby_presence: { Args: { p_lobby: string }; Returns: undefined }
     }

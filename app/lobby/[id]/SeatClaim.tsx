@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type SignReq = { id: string; qrPng?: string; deeplink?: string };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Signing a payload means leaving the browser for Xaman (a minute+ round-trip).
+// Mark the player non-stale for a grace window first, so host-migration timing
+// never penalises the away flow. Best-effort; failure never blocks the claim.
+function markClaimGrace(lobbyId: string) {
+  createClient()
+    .rpc("set_claim_grace", { p_lobby: lobbyId })
+    .then(() => {});
+}
 
 // Runs a Xaman sign flow: create request → (real) show QR/deeplink + poll, or
 // (mock) resolve immediately. `create` returns the sign request; `verify`
@@ -168,7 +178,8 @@ export function SeatClaimButton({
     if (rc.status === "validated") return finish();
     if (rc.status === "pending") return void watch(reconcile);
 
-    // Create a fresh sign request.
+    // Create a fresh sign request (about to leave for Xaman → claim grace).
+    markClaimGrace(lobbyId);
     let cr: Response;
     try {
       cr = await fetch(`/api/lobby/${lobbyId}/seat-claim`, { method: "POST" });
@@ -264,6 +275,7 @@ export function WalletLinkButton({
   async function link() {
     setBusy(true);
     setError(null);
+    markClaimGrace(lobbyId); // leaving for Xaman → don't count this as stale
     let address = "";
     const err = await runSignFlow(
       () => fetch(`/api/wallet/link`, { method: "POST" }),

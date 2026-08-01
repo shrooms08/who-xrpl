@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { advanceIfDue } from "@/lib/game/orchestration";
+import { sanitizeConfig } from "@/lib/game";
 import GameRoom, {
   type RoleCard,
   type RosterPlayer,
@@ -37,10 +38,11 @@ export default async function GamePage({
 
   const { data: game } = await supabase
     .from("games")
-    .select("id, lobby_id, status, winner, current_round")
+    .select("id, lobby_id, status, winner, current_round, config")
     .eq("id", gameId)
     .maybeSingle();
   if (!game) redirect("/?nogame=1");
+  const clueRounds = sanitizeConfig(game.config).clueRounds;
 
   const { data: lobby } = await supabase
     .from("lobbies")
@@ -101,6 +103,7 @@ export default async function GamePage({
       initialClues={clues}
       initialChat={(chat ?? []) as ChatView[]}
       initialPayouts={(payouts ?? []) as PayoutView[]}
+      clueRounds={clueRounds}
       serverNowIso={new Date().toISOString()}
     />
   );

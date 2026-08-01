@@ -128,6 +128,7 @@ export default function LobbyRoom({
   const hostIdRef = useRef(initialHostId);
   const onlineRef = useRef<Set<string>>(new Set());
   const leavingRef = useRef(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const isHost = hostId === userId;
 
@@ -263,22 +264,21 @@ export default function LobbyRoom({
       setOnline(set);
     };
 
-    const handleLeave = async (leftPresences: Array<{ player_id?: string }>) => {
+    const handleLeave = (leftPresences: Array<{ player_id?: string }>) => {
+      // Presence loss NEVER removes membership — it only dims the roster and,
+      // for a vanished HOST, provides host-migration timing. Leaving is explicit
+      // (leave button / host kick) only. (Bug 1: the host used to delete any
+      // non-host who dropped from presence, ejecting throttled/away phones.)
       for (const p of leftPresences) {
         const leftId = p.player_id;
         if (!leftId) continue;
 
-        if (hostIdRef.current === userId && leftId !== hostIdRef.current) {
-          await supabase
-            .from("lobby_players")
-            .delete()
-            .eq("lobby_id", lobbyId)
-            .eq("player_id", leftId);
-        }
-
         if (leftId === hostIdRef.current && leftId !== userId) {
+          // A vanished host MAY trigger role migration — but the RPC gates on
+          // 60s+ staleness and a claim-grace window, and never deletes the
+          // host's membership. Best-effort: re-probe while the host stays away.
           const absent = leftId;
-          setTimeout(() => {
+          const probe = () => {
             if (
               hostIdRef.current === absent &&
               !onlineRef.current.has(absent) &&
@@ -289,7 +289,9 @@ export default function LobbyRoom({
                 p_absent_host: absent,
               });
             }
-          }, 2000);
+          };
+          setTimeout(probe, 2000);
+          setTimeout(probe, 65000); // clears the 60s staleness gate if still gone
         }
       }
     };
@@ -390,20 +392,31 @@ export default function LobbyRoom({
           setChannelDown(true);
         }
       });
+    channelRef.current = channel;
 
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
   }, [supabase, lobbyId, userId, fetchMembers, isDesignatedReaper, refetchLobby, router]);
 
-  // Self-heal on focus / visibility / bfcache restore.
+  // Self-heal on focus / visibility / bfcache restore. Returning from Xaman
+  // (or any backgrounding) must RE-REGISTER PRESENCE, not just refetch state:
+  // re-track on the channel and refresh last_seen so a returned player is shown
+  // present again and can't be treated as stale for host-migration timing.
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refetchLobby();
+    const reregister = () => {
+      channelRef.current
+        ?.track({ player_id: userId, online_at: Date.now() })
+        .catch(() => {});
+      supabase.rpc("touch_lobby_presence", { p_lobby: lobbyId });
+      refetchLobby();
     };
-    const onFocus = () => refetchLobby();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reregister();
+    };
+    const onFocus = () => reregister();
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) refetchLobby();
+      if (e.persisted) reregister();
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
@@ -413,7 +426,7 @@ export default function LobbyRoom({
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [refetchLobby]);
+  }, [supabase, lobbyId, userId, refetchLobby]);
 
   // Unconditional backstop poll: realtime can connect yet silently deliver
   // nothing, which would miss the in_game flip — so resync every 4s regardless.

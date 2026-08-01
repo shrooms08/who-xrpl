@@ -63,6 +63,7 @@ export default function GameRoom({
   initialClues,
   initialChat,
   initialPayouts,
+  clueRounds,
   serverNowIso,
 }: {
   gameId: string;
@@ -77,6 +78,7 @@ export default function GameRoom({
   initialClues: ClueView[];
   initialChat: ChatView[];
   initialPayouts: PayoutView[];
+  clueRounds: number;
   serverNowIso: string;
 }) {
   const router = useRouter();
@@ -98,6 +100,11 @@ export default function GameRoom({
   const [voteProgress, setVoteProgress] = useState<{ voted: number; living: number } | null>(null);
   const [channelDown, setChannelDown] = useState(false);
   const [fetchFailing, setFetchFailing] = useState(false);
+  // Wall-clock of the last state fetch that actually succeeded. If we can't pull
+  // state for >10s while visible, we surface the trouble indicator (Bug 4a): a
+  // stalled poll / RLS-blocked refetch must never fossilize a screen silently.
+  const lastFetchOkRef = useRef(Date.now());
+  const [staleFetch, setStaleFetch] = useState(false);
 
   const [ready, setReady] = useState<boolean>(
     () => typeof window !== "undefined" && !!sessionStorage.getItem(`dealt:${gameId}`),
@@ -120,7 +127,10 @@ export default function GameRoom({
     round?.phase_ends_at && round.phase !== "end"
       ? serverNow - Date.parse(round.phase_ends_at)
       : 0;
-  const reconnecting = channelDown || fetchFailing || overdueMs > 3000;
+  const reconnecting = channelDown || fetchFailing || staleFetch || overdueMs > 3000;
+  // "connection trouble" (can't reach state) reads differently from "catching up"
+  // (reachable but behind the deadline) — surface the harder failure explicitly.
+  const connectionTrouble = channelDown || fetchFailing || staleFetch;
 
   // --- refreshers -----------------------------------------------------------
   const refreshRound = useCallback(async () => {
@@ -134,6 +144,7 @@ export default function GameRoom({
       .limit(1)
       .maybeSingle();
     setFetchFailing(!!error); // surface REST failures instead of silently no-op'ing
+    if (!error) lastFetchOkRef.current = Date.now(); // watchdog: last good state pull
     if (r) {
       setRound(r as RoundView);
       const { data: c } = await supabase
@@ -294,6 +305,20 @@ export default function GameRoom({
     return () => clearInterval(i);
   }, [gameId, refetchAll]);
 
+  // Trouble watchdog (Bug 4a): while visible and mid-game, if no state fetch has
+  // succeeded for >10s (throttled poll, dead socket, or a blocked refetch), show
+  // the connection-trouble indicator instead of silently freezing.
+  useEffect(() => {
+    const i = setInterval(() => {
+      setStaleFetch(
+        document.visibilityState === "visible" &&
+          roundRef.current?.phase !== "end" &&
+          Date.now() - lastFetchOkRef.current > 10000,
+      );
+    }, 2000);
+    return () => clearInterval(i);
+  }, []);
+
   // fetch the vote counter on entering the vote phase (realtime keeps it live)
   useEffect(() => {
     if (round?.phase === "vote") refreshVoteProgress();
@@ -364,6 +389,13 @@ export default function GameRoom({
   const phase = round?.phase;
   const myTurn = phase === "clue" && round?.current_turn_player_id === userId;
   const isEnded = status === "ended" || phase === "end";
+  // Which clue pass we're on (1-based) — clues submitted so far / players. Drives
+  // the "round N of M" banner so devices can't silently disagree about the pass.
+  const turnOrderLen = round?.turn_order?.length ?? 0;
+  const cluePass =
+    phase === "clue" && clueRounds > 1 && turnOrderLen > 0
+      ? Math.min(clueRounds, Math.floor(clues.length / turnOrderLen) + 1)
+      : null;
 
   // deal overlay (once per game session)
   if (!isEnded && !ready) {
@@ -389,7 +421,9 @@ export default function GameRoom({
                 {PHASE_LABEL[round.phase] ?? ""}
               </div>
               <div className="font-utility text-[11px] text-muted">
-                round {round.round_number}
+                {cluePass
+                  ? `round ${cluePass} of ${clueRounds}`
+                  : `round ${round.round_number}`}
               </div>
             </div>
             {round.phase_ends_at && round.phase !== "reveal" && (
@@ -402,7 +436,7 @@ export default function GameRoom({
       {reconnecting && (
         <div className="wobble-1 flex items-center gap-2 border-2 border-dashed border-faded bg-card px-3 py-1.5 font-utility text-[12px] text-muted">
           <span className="h-2 w-2 animate-tickpulse rounded-full bg-faded" />
-          {channelDown ? "reconnecting… hold on" : "catching up…"}
+          {connectionTrouble ? "connection trouble — retrying…" : "catching up…"}
         </div>
       )}
 
