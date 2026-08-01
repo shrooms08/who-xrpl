@@ -70,6 +70,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          pass: number
           player_id: string
           round_id: string
           text: string
@@ -77,6 +78,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          pass?: number
           player_id: string
           round_id: string
           text: string
@@ -84,6 +86,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          pass?: number
           player_id?: string
           round_id?: string
           text?: string
@@ -178,6 +181,7 @@ export type Database = {
       }
       games: {
         Row: {
+          config: Json
           created_at: string
           current_round: number
           ended_at: string | null
@@ -188,6 +192,7 @@ export type Database = {
           winner: Database["public"]["Enums"]["player_role"] | null
         }
         Insert: {
+          config?: Json
           created_at?: string
           current_round?: number
           ended_at?: string | null
@@ -198,6 +203,7 @@ export type Database = {
           winner?: Database["public"]["Enums"]["player_role"] | null
         }
         Update: {
+          config?: Json
           created_at?: string
           current_round?: number
           ended_at?: string | null
@@ -280,31 +286,40 @@ export type Database = {
       }
       lobbies: {
         Row: {
+          clue_rounds: number
           code: string
           created_at: string
+          discussion_seconds: number
           host_id: string
           id: string
           max_players: number
           mode: Database["public"]["Enums"]["lobby_mode"]
           status: Database["public"]["Enums"]["lobby_status"]
+          topic: string | null
         }
         Insert: {
+          clue_rounds?: number
           code: string
           created_at?: string
+          discussion_seconds?: number
           host_id: string
           id?: string
           max_players?: number
           mode?: Database["public"]["Enums"]["lobby_mode"]
           status?: Database["public"]["Enums"]["lobby_status"]
+          topic?: string | null
         }
         Update: {
+          clue_rounds?: number
           code?: string
           created_at?: string
+          discussion_seconds?: number
           host_id?: string
           id?: string
           max_players?: number
           mode?: Database["public"]["Enums"]["lobby_mode"]
           status?: Database["public"]["Enums"]["lobby_status"]
+          topic?: string | null
         }
         Relationships: [
           {

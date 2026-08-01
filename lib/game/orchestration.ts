@@ -12,8 +12,10 @@ import {
   makeRng,
   pickWord,
   NO_CLUE,
-  TIMERS,
   MIN_PLAYERS,
+  sanitizeConfig,
+  configFromSettings,
+  type GameConfig,
   type GameState,
 } from "@/lib/game";
 
@@ -27,19 +29,23 @@ export interface LoadedGame {
   phaseEndsAt: string | null;
 }
 
-/** Seconds a phase is allowed to run; null = untimed (terminal). */
-export function durationFor(phase: GameState["phase"]): number | null {
+/** Seconds a phase is allowed to run, from the game's own config; null = untimed
+ *  (terminal). The running game reads its snapshot, never the TIMERS constants. */
+export function durationFor(
+  phase: GameState["phase"],
+  config: GameConfig,
+): number | null {
   switch (phase) {
     case "clue":
-      return TIMERS.clueTurn;
+      return config.clueTurnSeconds;
     case "discussion":
-      return TIMERS.discussion;
+      return config.discussionSeconds;
     case "vote":
-      return TIMERS.vote;
+      return config.voteSeconds;
     case "guess":
-      return TIMERS.guess;
+      return config.guessSeconds;
     case "reveal":
-      return TIMERS.reveal;
+      return config.revealSeconds;
     default:
       return null; // end
   }
@@ -61,7 +67,7 @@ export async function loadGameState(
 ): Promise<LoadedGame | null> {
   const { data: game } = await admin
     .from("games")
-    .select("id, lobby_id, status, current_round, version, winner")
+    .select("id, lobby_id, status, current_round, version, winner, config")
     .eq("id", gameId)
     .maybeSingle();
   if (!game) return null;
@@ -89,7 +95,7 @@ export async function loadGameState(
 
   const { data: clues } = await admin
     .from("clues")
-    .select("player_id, text, created_at")
+    .select("player_id, text, pass, created_at")
     .eq("round_id", round.id)
     .order("created_at", { ascending: true });
 
@@ -102,6 +108,7 @@ export async function loadGameState(
     phase: round.phase as GameState["phase"],
     word: secret.word,
     category: secret.category,
+    config: sanitizeConfig(game.config),
     round: round.round_number,
     players: (gps ?? []).map((p) => ({
       id: p.player_id,
@@ -110,7 +117,11 @@ export async function loadGameState(
     })),
     order: round.turn_order ?? [],
     turnIndex: round.turn_index,
-    clues: (clues ?? []).map((c) => ({ playerId: c.player_id, text: c.text })),
+    clues: (clues ?? []).map((c) => ({
+      playerId: c.player_id,
+      text: c.text,
+      pass: c.pass ?? 0,
+    })),
     votes: (votes ?? []).map((v) => ({
       voterId: v.voter_id,
       targetId: v.target_id,
@@ -146,13 +157,17 @@ function serialize(state: GameState): Json {
     order: state.order,
     turnIndex: state.turnIndex,
     currentTurnPlayerId: currentCluePlayer(state),
-    clues: state.clues.map((c) => ({ playerId: c.playerId, text: c.text })),
+    clues: state.clues.map((c) => ({
+      playerId: c.playerId,
+      text: c.text,
+      pass: c.pass,
+    })),
     votes: state.votes.map((v) => ({ voterId: v.voterId, targetId: v.targetId })),
     ejectedThisRound: state.ejectedThisRound,
     ejectedRole: state.ejectedRole,
     awaitingGuess: state.awaitingGuess,
     guessWasCorrect: state.guessWasCorrect,
-    phaseDurationSeconds: durationFor(state.phase),
+    phaseDurationSeconds: durationFor(state.phase, state.config),
   } as Json;
 }
 
@@ -206,11 +221,20 @@ export async function mutateGame(
   return { error: "conflict" };
 }
 
-/** Host-validated start: atomically claim the lobby, deal roles + word, persist. */
+export interface LobbySettings {
+  discussionSeconds?: number | null;
+  clueRounds?: number | null;
+  topic?: string | null; // null/undefined = Random
+}
+
+/** Host-validated start: atomically claim the lobby, snapshot the host settings
+ *  into the game's config, draw a word (respecting the chosen topic), deal, and
+ *  persist. Settings default to the standard config when omitted. */
 export async function startGame(
   admin: Admin,
   lobbyId: string,
   maxPlayers: number,
+  settings: LobbySettings = {},
 ): Promise<string> {
   // atomic claim: only one starter flips waiting → in_game
   const { data: claimed } = await admin
@@ -233,9 +257,16 @@ export async function startGame(
     throw new Error("bad_player_count");
   }
 
+  const config = configFromSettings(settings);
   const { data: game, error } = await admin
     .from("games")
-    .insert({ lobby_id: lobbyId, status: "active", current_round: 0, version: 0 })
+    .insert({
+      lobby_id: lobbyId,
+      status: "active",
+      current_round: 0,
+      version: 0,
+      config: config as unknown as Json,
+    })
     .select("id")
     .single();
   if (error || !game) {
@@ -244,8 +275,14 @@ export async function startGame(
   }
 
   const rng = makeRng(seedFrom(game.id));
-  const choice = pickWord(rng);
-  const state = deal({ playerIds, word: choice.word, category: choice.category, rng });
+  const choice = pickWord(rng, settings.topic ?? undefined);
+  const state = deal({
+    playerIds,
+    word: choice.word,
+    category: choice.category,
+    rng,
+    config,
+  });
   await persist(admin, game.id, 0, state, true);
   return game.id;
 }

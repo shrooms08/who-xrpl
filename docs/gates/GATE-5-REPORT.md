@@ -115,4 +115,65 @@ valid payment via reconcile — desirable, since that seat was genuinely paid.)
 
 ---
 
-## Part 3 — Host settings ⏳ (pending)
+## Part 3 — Host settings ✅ (STOP — full gate report below)
+
+Host-only lobby settings, pre-game, locked at start, visible to all players.
+Every timing constant is now per-game config; the engine stays pure/deterministic
+(config is state, not ambient constants).
+
+### Settings + persistence
+- **Lobby columns** (migration 0015, with CHECK constraints): `discussion_seconds`
+  (60/90/120/180, default 120), `clue_rounds` (1/2, default 1), `topic` (a category
+  or null = Random). Persist on the lobby → survive play-again; host may adjust
+  between games. Host writes via RLS `lobbies_update_host` (same path as the mode
+  toggle); the realtime `lobbies` UPDATE broadcast mirrors changes to every player.
+- **Panel** (`LobbyRoom`): host sees ink segmented controls (discussion time, clue
+  rounds, topic incl. Random); non-hosts see a read-only "set by host" summary.
+  Shown only while `status = waiting`, so values lock once the game starts.
+- **Per-game snapshot**: `games.config` (jsonb) holds the settings the running game
+  reads. Set once at `startGame`; the engine never reads lobby settings or the
+  TIMERS constants directly. Old games (`config = {}`) sanitize to defaults.
+
+### Discussion time
+`durationFor(phase, config)` reads `config.discussionSeconds` (and every other
+timer) from the game's snapshot. `TIMERS` is now only the default source.
+
+### Clue rounds (engine state-machine change)
+- `GameState.config.clueRounds` drives the clue phase: the turn order is traversed
+  `clueRounds` times before discussion. `currentCluePlayer` indexes `order[turnIndex
+  % order.length]`; `submitClue` moves to discussion at `turnIndex >= order.length *
+  clueRounds`.
+- Each clue carries its **`pass`** (0-based). The word-containment check runs per
+  clue (unchanged). `clues.pass` column + `unique(round_id, player_id, pass)` so a
+  player can legitimately clue twice per round; `apply_game_state` persists `pass`.
+- **Clue feed groups by round** (`ClueFeed`): a "round N" header per pass when
+  `clueRounds = 2`; a single ungrouped list when 1.
+
+### Topic
+`pickWord(rng, topic)` restricts the draw to the chosen category (or the whole
+bank when null/unknown). The chosen topic shows in the lobby pre-start and is
+snapshotted with the rest of the settings at start.
+
+### Word bank
+Expanded to **156 words across 6 categories (26 each)** so a picked topic stays
+fresh across a game night. Still a single trivially-editable `word-bank.json`
+(each key a category, each value a list of single-token words).
+
+### Tests
+- **93 unit tests pass** (was 49). New: clueRounds 1 & 2 across every player count
+  4–10 — exact clue-turn counts, per-pass coverage, pass-2 repeats pass-1 order —
+  and a full game to **both** win paths (crew clears all imposters; ejected
+  imposter guesses correctly) for each. Word bank: ≥150 words, ≥20 per category,
+  topic-restricted draw. Per-clue containment enforced across both passes.
+- Live-DB e2e re-run to validate config persistence + clue `pass` round-trip.
+- `tsc` clean; production build compiles.
+
+---
+
+## Acceptance (host manual run — full session)
+1. Host sets discussion time / clue rounds / topic pre-game; all players see them;
+   values lock at start.
+2. 2 clue rounds → every player clues twice before discussion; feed groups by round.
+3. Chosen topic → the secret word comes from that category.
+4. Discussion runs for the chosen duration.
+5. Play-again keeps the settings; host may adjust for the next game.

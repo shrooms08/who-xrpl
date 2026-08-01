@@ -21,6 +21,8 @@ import {
   makeRng,
   pickWord,
   allWords,
+  categoryKeys,
+  defaultConfig,
   type GameState,
 } from "../index";
 
@@ -360,14 +362,133 @@ describe("phase guards reject out-of-phase actions", () => {
 // word bank
 // ---------------------------------------------------------------------------
 describe("word bank", () => {
-  it("has 100 words across 6 categories", () => {
+  it("has 150+ words across 6 categories, each with real depth", () => {
     const all = allWords();
-    expect(all).toHaveLength(100);
+    expect(all.length).toBeGreaterThanOrEqual(150);
     expect(new Set(all.map((w) => w.category)).size).toBe(6);
+    // every category is deep enough to stay fresh as a chosen topic
+    for (const cat of categoryKeys()) {
+      const n = all.filter((w) => w.category === cat).length;
+      expect(n).toBeGreaterThanOrEqual(20);
+    }
   });
   it("pickWord is deterministic under a seed and returns a real entry", () => {
     const w = pickWord(makeRng(123));
     expect(allWords()).toContainEqual(w);
     expect(pickWord(makeRng(123))).toEqual(w);
+  });
+  it("pickWord respects a chosen topic; unknown topic falls back to the whole bank", () => {
+    for (const cat of categoryKeys()) {
+      const w = pickWord(makeRng(7), cat);
+      expect(w.category).toBe(cat);
+    }
+    // unknown topic → any category
+    expect(categoryKeys()).toContain(pickWord(makeRng(7), "nonsense").category);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// clue rounds (host setting): 1 or 2 passes over the turn order
+// ---------------------------------------------------------------------------
+function playGame(
+  size: number,
+  clueRounds: number,
+  mode: "crew" | "imposter",
+): GameState {
+  const rng = makeRng(size * 100 + clueRounds * 7 + (mode === "crew" ? 1 : 2));
+  let s = deal({
+    playerIds: ids(size),
+    word: "target",
+    category: "test",
+    rng,
+    config: { ...defaultConfig(), clueRounds },
+  });
+  for (let guard = 0; s.phase !== "end" && guard < 1000; guard++) {
+    switch (s.phase) {
+      case "clue":
+        s = submitClue(s, currentCluePlayer(s)!, "clue");
+        break;
+      case "discussion":
+        s = startVote(s);
+        break;
+      case "vote": {
+        // Always eject a living imposter (so a guess phase is reached each round).
+        const target = livingImposters(s)[0]?.id ?? livingCrew(s)[0]!.id;
+        for (const v of livingIds(s)) s = submitVote(s, v, target);
+        s = closeVote(s);
+        break;
+      }
+      case "guess":
+        // Correct guess → imposter win now; wrong → crew keep clearing imposters.
+        s = submitGuess(s, mode === "imposter" ? s.word : "wrong");
+        break;
+      case "reveal":
+        s = concludeRound(s, rng);
+        break;
+    }
+  }
+  return s;
+}
+
+describe("clue rounds", () => {
+  for (const size of sizes()) {
+    for (const cr of [1, 2]) {
+      it(`clueRounds=${cr}, ${size}p: ${size * cr} clue turns then discussion`, () => {
+        let s = deal({
+          playerIds: ids(size),
+          word: "target",
+          category: "test",
+          rng: makeRng(1),
+          config: { ...defaultConfig(), clueRounds: cr },
+        });
+        const seen: string[] = [];
+        let turns = 0;
+        while (s.phase === "clue") {
+          const p = currentCluePlayer(s)!;
+          seen.push(p);
+          s = submitClue(s, p, `clue${turns}`);
+          turns++;
+        }
+        expect(turns).toBe(size * cr);
+        expect(s.phase).toBe("discussion");
+        // each player clued exactly `cr` times, and every pass covers the order
+        for (const id of ids(size)) {
+          expect(seen.filter((x) => x === id)).toHaveLength(cr);
+        }
+        for (let k = 0; k < cr; k++) {
+          expect(s.clues.filter((c) => c.pass === k)).toHaveLength(size);
+        }
+        // pass 2 repeats pass 1's turn order exactly
+        if (cr === 2) expect(seen.slice(0, size)).toEqual(seen.slice(size));
+      });
+
+      it(`clueRounds=${cr}, ${size}p: reaches a crew win`, () => {
+        const s = playGame(size, cr, "crew");
+        expect(s.phase).toBe("end");
+        expect(s.winner).toBe("crew");
+      });
+
+      it(`clueRounds=${cr}, ${size}p: reaches an imposter win`, () => {
+        const s = playGame(size, cr, "imposter");
+        expect(s.phase).toBe("end");
+        expect(s.winner).toBe("imposter");
+      });
+    }
+  }
+
+  it("word-containment check applies to every clue in both passes", () => {
+    let s = deal({
+      playerIds: ids(4),
+      word: "target",
+      category: "test",
+      rng: makeRng(2),
+      config: { ...defaultConfig(), clueRounds: 2 },
+    });
+    // first pass
+    for (let i = 0; i < 4; i++) s = submitClue(s, currentCluePlayer(s)!, "ok");
+    // second pass: an illegal clue (contains the word) is rejected mid-pass
+    expect(() => submitClue(s, currentCluePlayer(s)!, "the target here")).toThrow(
+      "contains_word",
+    );
   });
 });

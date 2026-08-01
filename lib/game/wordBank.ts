@@ -17,8 +17,18 @@ export function allWords(): WordChoice[] {
   return out;
 }
 
-/** Deterministically pick a secret word given an injected Rng. */
-export function pickWord(rng: Rng): WordChoice {
-  const all = allWords();
-  return all[Math.floor(rng() * all.length)];
+/** Category keys available in the bank. */
+export function categoryKeys(): string[] {
+  return Object.keys(CATEGORIES);
+}
+
+/** Deterministically pick a secret word given an injected Rng. When `topic` is a
+ *  known category, the draw is restricted to it; otherwise (null/unknown) the
+ *  whole bank is used. */
+export function pickWord(rng: Rng, topic?: string | null): WordChoice {
+  const pool =
+    topic && CATEGORIES[topic]
+      ? CATEGORIES[topic].map((word) => ({ word, category: topic }))
+      : allWords();
+  return pool[Math.floor(rng() * pool.length)];
 }

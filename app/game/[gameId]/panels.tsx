@@ -137,24 +137,39 @@ export function ClueFeed({
   roster: RosterPlayer[];
 }) {
   if (!clues.length) return null;
+  // Group by clue pass. With 2 clue rounds a player clues twice, so we show a
+  // "round N" header per pass; with a single round there's just one group.
+  const passes = [...new Set(clues.map((c) => c.pass))].sort((a, b) => a - b);
+  const multi = passes.length > 1;
   return (
     <section className="flex flex-col gap-2">
       <div className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
         clues so far
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {clues.map((c, i) => (
-          <div
-            key={i}
-            className={`min-w-[128px] border-[1.5px] border-ink bg-card ${WOBBLE[i % 4]} ${i % 2 ? "tilt-2" : "tilt-1"} shadow-ink px-3 py-2`}
-          >
-            <div className="font-utility text-[11px] text-muted">
-              {nameOf(roster, c.player_id)}
+      {passes.map((p) => (
+        <div key={p} className="flex flex-col gap-1.5">
+          {multi && (
+            <div className="font-utility text-[10px] uppercase tracking-[0.08em] text-faded">
+              round {p + 1}
             </div>
-            <div className="font-body text-[15px] leading-tight">{c.text}</div>
+          )}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {clues
+              .filter((c) => c.pass === p)
+              .map((c, i) => (
+                <div
+                  key={i}
+                  className={`min-w-[128px] border-[1.5px] border-ink bg-card ${WOBBLE[i % 4]} ${i % 2 ? "tilt-2" : "tilt-1"} shadow-ink px-3 py-2`}
+                >
+                  <div className="font-utility text-[11px] text-muted">
+                    {nameOf(roster, c.player_id)}
+                  </div>
+                  <div className="font-body text-[15px] leading-tight">{c.text}</div>
+                </div>
+              ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </section>
   );
 }

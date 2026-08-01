@@ -138,8 +138,9 @@ export default function GameRoom({
       setRound(r as RoundView);
       const { data: c } = await supabase
         .from("clues")
-        .select("player_id, text")
+        .select("player_id, text, pass")
         .eq("round_id", r.id)
+        .order("pass", { ascending: true })
         .order("created_at", { ascending: true });
       setClues(c ?? []);
     }

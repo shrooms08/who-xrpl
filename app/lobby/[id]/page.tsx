@@ -27,7 +27,7 @@ export default async function LobbyPage({
   // RLS: only members/host can read the lobby. No row → not a member.
   const { data: lobby } = await supabase
     .from("lobbies")
-    .select("id, code, status, max_players, host_id, mode")
+    .select("id, code, status, max_players, host_id, mode, discussion_seconds, clue_rounds, topic")
     .eq("id", lobbyId)
     .maybeSingle();
   if (!lobby) redirect("/?notmember=1");
@@ -103,6 +103,9 @@ export default async function LobbyPage({
       initialMembers={members}
       initialClaims={initialClaims}
       linkedAddress={linkedAddress}
+      initialDiscussionSeconds={lobby.discussion_seconds}
+      initialClueRounds={lobby.clue_rounds}
+      initialTopic={lobby.topic}
     />
   );
 }

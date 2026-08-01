@@ -12,6 +12,11 @@ import { CodeEntry } from "@/components/ui/CodeEntry";
 import { Toast } from "@/components/ui/Toast";
 import { AvatarChip } from "@/components/ui/AvatarChip";
 import { SeatClaimButton, WalletLinkButton } from "./SeatClaim";
+import {
+  DISCUSSION_OPTIONS,
+  CLUE_ROUNDS_OPTIONS,
+  TOPIC_CATEGORIES,
+} from "@/lib/game";
 
 export type Member = {
   playerId: string;
@@ -20,6 +25,53 @@ export type Member = {
 };
 
 type Mode = "casual" | "onchain";
+
+const topicLabel = (t: string | null) => t ?? "random";
+
+/** One segmented control in the host settings panel. Non-host lobbies render a
+ *  read-only summary instead, so these are only ever shown to the host. */
+function SegButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={[
+        "border-2 px-2.5 py-1 font-utility text-[12px] lowercase transition-colors",
+        active
+          ? "border-ink bg-ink text-paper"
+          : "border-faded text-muted hover:border-ink hover:text-ink",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SettingRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="font-utility text-[10px] uppercase tracking-[0.08em] text-faded">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
 
 const MIN_PLAYERS = 4;
 
@@ -34,6 +86,9 @@ export default function LobbyRoom({
   initialMembers,
   initialClaims,
   linkedAddress,
+  initialDiscussionSeconds,
+  initialClueRounds,
+  initialTopic,
 }: {
   lobbyId: string;
   code: string;
@@ -45,6 +100,9 @@ export default function LobbyRoom({
   initialMembers: Member[];
   initialClaims: string[];
   linkedAddress: string | null;
+  initialDiscussionSeconds: number;
+  initialClueRounds: number;
+  initialTopic: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -61,6 +119,10 @@ export default function LobbyRoom({
   const [mode, setMode] = useState<Mode>(initialMode);
   const [claims, setClaims] = useState<Set<string>>(new Set(initialClaims));
   const [walletAddress, setWalletAddress] = useState<string | null>(linkedAddress);
+  // Host settings (persisted on the lobby; locked at start; shown to all players).
+  const [discussionSeconds, setDiscussionSeconds] = useState(initialDiscussionSeconds);
+  const [clueRounds, setClueRounds] = useState(initialClueRounds);
+  const [topic, setTopic] = useState<string | null>(initialTopic);
 
   const membersRef = useRef(initialMembers);
   const hostIdRef = useRef(initialHostId);
@@ -160,13 +222,16 @@ export default function LobbyRoom({
   const refetchLobby = useCallback(async () => {
     const { data: l } = await supabase
       .from("lobbies")
-      .select("status, host_id, mode")
+      .select("status, host_id, mode, discussion_seconds, clue_rounds, topic")
       .eq("id", lobbyId)
       .maybeSingle();
     if (l) {
       hostIdRef.current = l.host_id;
       setHostId(l.host_id);
       setStatus(l.status);
+      setDiscussionSeconds(l.discussion_seconds);
+      setClueRounds(l.clue_rounds);
+      setTopic(l.topic);
       setMode(l.mode);
       if (l.status === "in_game") {
         const { data: g } = await supabase
@@ -250,11 +315,21 @@ export default function LobbyRoom({
           filter: `id=eq.${lobbyId}`,
         },
         (payload) => {
-          const row = payload.new as { host_id: string; status: string; mode: Mode };
+          const row = payload.new as {
+            host_id: string;
+            status: string;
+            mode: Mode;
+            discussion_seconds?: number;
+            clue_rounds?: number;
+            topic?: string | null;
+          };
           hostIdRef.current = row.host_id;
           setHostId(row.host_id);
           setStatus(row.status);
           if (row.mode) setMode(row.mode);
+          if (typeof row.discussion_seconds === "number") setDiscussionSeconds(row.discussion_seconds);
+          if (typeof row.clue_rounds === "number") setClueRounds(row.clue_rounds);
+          if (row.topic !== undefined) setTopic(row.topic);
           if (row.status === "in_game") {
             // the game started — send every player into it
             supabase
@@ -403,6 +478,20 @@ export default function LobbyRoom({
     if (error) setError(lobbyErrorMessage(error));
   }
 
+  // Host-only, pre-game. Optimistic; RLS lets only the host update, and the
+  // realtime lobbies-UPDATE broadcast mirrors the change to every player.
+  async function changeSettings(patch: {
+    discussion_seconds?: number;
+    clue_rounds?: number;
+    topic?: string | null;
+  }) {
+    if (patch.discussion_seconds !== undefined) setDiscussionSeconds(patch.discussion_seconds);
+    if (patch.clue_rounds !== undefined) setClueRounds(patch.clue_rounds);
+    if (patch.topic !== undefined) setTopic(patch.topic);
+    const { error } = await supabase.from("lobbies").update(patch).eq("id", lobbyId);
+    if (error) setError(lobbyErrorMessage(error));
+  }
+
   const enoughPlayers = members.length >= MIN_PLAYERS;
   const allClaimed =
     mode === "casual" || members.every((m) => claims.has(m.playerId));
@@ -478,6 +567,63 @@ export default function LobbyRoom({
           </button>
         </div>
       )}
+
+      {/* host settings (pre-game only; locked at start; visible to all players) */}
+      {status === "waiting" &&
+        (isHost ? (
+          <Card wobble={2} className="flex flex-col gap-4 p-5">
+            <span className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+              game settings
+            </span>
+            <SettingRow label="discussion time">
+              {DISCUSSION_OPTIONS.map((s) => (
+                <SegButton
+                  key={s}
+                  active={discussionSeconds === s}
+                  onClick={() => changeSettings({ discussion_seconds: s })}
+                >
+                  {s}s
+                </SegButton>
+              ))}
+            </SettingRow>
+            <SettingRow label="clue rounds before discussion">
+              {CLUE_ROUNDS_OPTIONS.map((n) => (
+                <SegButton
+                  key={n}
+                  active={clueRounds === n}
+                  onClick={() => changeSettings({ clue_rounds: n })}
+                >
+                  {n === 1 ? "1 round" : "2 rounds"}
+                </SegButton>
+              ))}
+            </SettingRow>
+            <SettingRow label="topic">
+              <SegButton active={topic === null} onClick={() => changeSettings({ topic: null })}>
+                random
+              </SegButton>
+              {TOPIC_CATEGORIES.map((c) => (
+                <SegButton
+                  key={c}
+                  active={topic === c}
+                  onClick={() => changeSettings({ topic: c })}
+                >
+                  {c}
+                </SegButton>
+              ))}
+            </SettingRow>
+          </Card>
+        ) : (
+          <Card wobble={2} className="flex flex-col gap-1 p-4">
+            <span className="font-utility text-[11px] uppercase tracking-[0.08em] text-muted">
+              game settings · set by host
+            </span>
+            <span className="font-body text-[15px] text-ink">
+              discussion {discussionSeconds}s ·{" "}
+              {clueRounds === 2 ? "2 clue rounds" : "1 clue round"} · topic{" "}
+              {topicLabel(topic)}
+            </span>
+          </Card>
+        ))}
 
       {/* on-chain: link a wallet, then claim your seat (12 drops) */}
       {mode === "onchain" && (

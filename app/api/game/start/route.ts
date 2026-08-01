@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
   const { data: lobby } = await supabase
     .from("lobbies")
-    .select("id, host_id, max_players, status, mode")
+    .select("id, host_id, max_players, status, mode, discussion_seconds, clue_rounds, topic")
     .eq("id", lobbyId)
     .maybeSingle();
   if (!lobby) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -66,7 +66,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const gameId = await startGame(admin, lobbyId, lobby.max_players);
+    const gameId = await startGame(admin, lobbyId, lobby.max_players, {
+      discussionSeconds: lobby.discussion_seconds,
+      clueRounds: lobby.clue_rounds,
+      topic: lobby.topic,
+    });
     return NextResponse.json({ gameId });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 409 });

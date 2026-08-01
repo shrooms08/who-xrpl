@@ -11,6 +11,8 @@ import {
   MIN_PLAYERS,
   MAX_PLAYERS,
   imposterCount,
+  defaultConfig,
+  type GameConfig,
 } from "./config";
 import { shuffle, type Rng } from "./rng";
 import type { ClueError, GameState, Player, Role, Vote } from "./types";
@@ -29,8 +31,16 @@ export const imposterIds = (s: GameState): string[] =>
   s.players.filter((p) => p.role === "imposter").map((p) => p.id);
 export const roleOf = (s: GameState, id: string): Role | undefined =>
   s.players.find((p) => p.id === id)?.role;
+// Turn order can be traversed more than once (config.clueRounds passes), so the
+// live clue player is the turn index MODULO the order length.
 export const currentCluePlayer = (s: GameState): string | null =>
-  s.phase === "clue" ? (s.order[s.turnIndex] ?? null) : null;
+  s.phase === "clue" && s.order.length > 0
+    ? (s.order[s.turnIndex % s.order.length] ?? null)
+    : null;
+
+/** How many clue turns a round has: one pass per configured clue round. */
+export const clueTurnsThisRound = (s: GameState): number =>
+  s.order.length * s.config.clueRounds;
 
 const normalize = (t: string) => t.trim().toLowerCase();
 
@@ -107,8 +117,10 @@ export function deal(input: {
   word: string;
   category: string;
   rng: Rng;
+  config?: GameConfig;
 }): GameState {
   const { playerIds, word, category, rng } = input;
+  const config = input.config ?? defaultConfig();
   if (playerIds.length < MIN_PLAYERS || playerIds.length > MAX_PLAYERS) {
     throw new Error(`unsupported player count: ${playerIds.length}`);
   }
@@ -121,6 +133,7 @@ export function deal(input: {
     phase: "clue",
     word,
     category,
+    config,
     round: 1,
     players,
     order,
@@ -147,9 +160,12 @@ export function submitClue(
   const err = clueError(text, s.word);
   if (err !== "ok") throw new Error(err);
 
-  const clues = [...s.clues, { playerId, text: text.trim() }];
+  // The pass (0-based) this clue belongs to — drives clue-feed grouping when
+  // clueRounds > 1. The word-containment check above runs per clue regardless.
+  const pass = Math.floor(s.turnIndex / s.order.length);
+  const clues = [...s.clues, { playerId, text: text.trim(), pass }];
   const turnIndex = s.turnIndex + 1;
-  const done = turnIndex >= s.order.length;
+  const done = turnIndex >= clueTurnsThisRound(s);
   return { ...s, clues, turnIndex, phase: done ? "discussion" : "clue" };
 }
 

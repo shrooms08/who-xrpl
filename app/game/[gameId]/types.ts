@@ -36,7 +36,7 @@ export type RoundView = {
   guess_correct: boolean | null;
 };
 
-export type ClueView = { player_id: string; text: string };
+export type ClueView = { player_id: string; text: string; pass: number };
 export type ChatView = { id: string; player_id: string; content: string };
 
 export type PayoutView = {

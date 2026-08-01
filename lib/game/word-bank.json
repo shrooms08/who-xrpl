@@ -1,36 +1,47 @@
 {
-  "version": 1,
-  "note": "Secret-word bank for WHO?. Edit freely: add/remove words or whole categories. Each key is a category; each value is its list of single-token secret words. Total is currently 100 across 6 categories.",
+  "version": 2,
+  "note": "Secret-word bank for WHO?. Edit freely: add/remove words or whole categories. Each key is a category (also selectable as a lobby 'topic'); each value is its list of single-token secret words. Keep categories roughly balanced (~26 each) so a picked topic stays fresh across a game night. Total is currently 156 across 6 categories.",
   "categories": {
     "food": [
       "pizza", "burger", "sushi", "pasta", "taco", "waffle", "pancake",
       "avocado", "mango", "croissant", "dumpling", "popcorn", "brownie",
-      "omelette", "noodle", "cupcake", "kebab"
+      "omelette", "noodle", "cupcake", "kebab", "lasagna", "burrito",
+      "pretzel", "donut", "ramen", "cheesecake", "guacamole", "spaghetti",
+      "meatball"
     ],
     "places": [
       "airport", "library", "beach", "volcano", "museum", "castle", "subway",
       "lighthouse", "desert", "glacier", "stadium", "market", "hospital",
-      "cathedral", "harbor", "waterfall", "vineyard"
+      "cathedral", "harbor", "waterfall", "vineyard", "aquarium", "temple",
+      "bakery", "casino", "bridge", "tunnel", "canyon", "windmill", "carnival"
     ],
     "objects": [
       "umbrella", "telescope", "hammer", "mirror", "candle", "backpack",
       "compass", "ladder", "kettle", "scissors", "guitar", "blanket",
-      "flashlight", "anchor", "wrench", "thermostat", "stapler"
+      "flashlight", "anchor", "wrench", "thermostat", "stapler", "toaster",
+      "pillow", "lantern", "magnet", "broom", "keyboard", "binoculars",
+      "harmonica", "corkscrew"
     ],
     "animals": [
       "penguin", "dolphin", "octopus", "hedgehog", "kangaroo", "giraffe",
       "chameleon", "otter", "falcon", "panda", "jellyfish", "raccoon",
-      "flamingo", "walrus", "koala", "hamster", "cheetah"
+      "flamingo", "walrus", "koala", "hamster", "cheetah", "platypus",
+      "armadillo", "narwhal", "meerkat", "porcupine", "gorilla", "ostrich",
+      "lobster", "squirrel"
     ],
     "occupations": [
       "plumber", "surgeon", "pilot", "barista", "electrician", "journalist",
       "firefighter", "architect", "lifeguard", "teacher", "mechanic", "chef",
-      "farmer", "dentist", "photographer", "carpenter"
+      "farmer", "dentist", "photographer", "carpenter", "blacksmith",
+      "astronaut", "librarian", "sailor", "magician", "tailor", "butcher",
+      "jeweler", "welder", "accountant"
     ],
     "football": [
       "goalkeeper", "penalty", "offside", "striker", "corner", "dribble",
       "midfielder", "hattrick", "volley", "freekick", "defender", "header",
-      "tackle", "nutmeg", "stoppage", "throwin"
+      "tackle", "nutmeg", "stoppage", "throwin", "crossbar", "winger",
+      "halftime", "equalizer", "clearance", "handball", "kickoff",
+      "substitute", "captain", "linesman"
     ]
   }
 }

@@ -68,8 +68,9 @@ export default async function GamePage({
   if (round) {
     const { data: c } = await supabase
       .from("clues")
-      .select("player_id, text")
+      .select("player_id, text, pass")
       .eq("round_id", round.id)
+      .order("pass", { ascending: true })
       .order("created_at", { ascending: true });
     clues = c ?? [];
   }
